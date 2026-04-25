@@ -2,12 +2,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 
-// 管理者IDとパスワード設定
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
 const CameraIcon = () => (
   <svg width="22" height="20" viewBox="0 0 24 22" fill="none" stroke="#D4AF37" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2 2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
     <circle cx="12" cy="13" r="4"/>
   </svg>
 );
@@ -36,7 +35,6 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(true);
   
   const scrollRef = useRef(null);
-  const textareaRef = useRef(null);
 
   useEffect(() => {
     const initSession = async () => {
@@ -81,7 +79,7 @@ export default function ChatPage() {
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
     if (data) {
       // 自分の送信、または管理者から自分への送信のみフィルタ
-      const filtered = data.filter(m => m.user_id === userId || (m.user_id === ADMIN_ID && m.recipient_id === userId));
+      const filtered = data.filter(m => m.user_id === userId || (m.user_id === ADMIN_ID && m.receiver_id === userId));
       setMessages(filtered);
       setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
     }
@@ -92,18 +90,16 @@ export default function ChatPage() {
     const content = imageUrl || inputText;
     setInputText('');
 
+    // 【重要】テーブル定義に存在するカラムのみを指定
     const { error } = await supabase.from('messages').insert([{
       content,
       user_id: user.id,
       is_image: !!imageUrl,
-      recipient_id: ADMIN_ID,
-      receiver_id: ADMIN_ID,
-      username: profile.username || 'GUEST',
-      avatar_url: profile.avatar_url || '',
-      is_read: false
+      receiver_id: ADMIN_ID
     }]);
 
     if (error) {
+      console.error(error);
       alert("送信に失敗しました");
       if (!imageUrl) setInputText(content);
     } else {
@@ -122,15 +118,6 @@ export default function ChatPage() {
     handleSend(publicUrl);
   };
 
-  const handleAvatarUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file || !user) return;
-    const filePath = `avatars/${user.id}`;
-    await supabase.storage.from('chat-images').upload(filePath, file, { upsert: true });
-    const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-    setProfile({ ...profile, avatar_url: publicUrl });
-  };
-
   const saveProfile = async () => {
     const { error } = await supabase.from('profiles').upsert({
       id: user.id,
@@ -145,17 +132,17 @@ export default function ChatPage() {
 
   if (!user) return (
     <div style={{ maxWidth: '400px', margin: '100px auto', padding: '30px', background: '#0a0a0a', color: '#fff', borderRadius: '20px', border: '2px solid #800000', textAlign: 'center' }}>
-      <h2 style={{ color: '#800000', fontFamily: 'serif' }}>{isSignUp ? "SIGN UP" : "for VAU"}</h2>
+      <h2 style={{ color: '#800000' }}>{isSignUp ? "SIGN UP" : "for VAU"}</h2>
       <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ width: '100%', padding: '12px', margin: '10px 0', background: '#1a1a1a', color: '#fff', border: '1px solid #333' }} />
-      <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '20px', background: '#1a1a1a', color: '#fff', border: '1px solid #333' }} />
+      <input type="password" placeholder="Pw" value={password} onChange={e => setPassword(e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '20px', background: '#1a1a1a', color: '#fff', border: '1px solid #333' }} />
       <button onClick={async () => {
         const { error } = isSignUp ? await supabase.auth.signUp({ email, password }) : await supabase.auth.signInWithPassword({ email, password });
         if (error) alert(error.message);
-      }} style={{ width: '100%', padding: '12px', background: '#800000', color: '#fff', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>
-        {isSignUp ? "CREATE ACCOUNT" : "LOG IN"}
+      }} style={{ width: '100%', padding: '12px', background: '#800000', color: '#fff', fontWeight: 'bold', border: 'none' }}>
+        {isSignUp ? "CREATE" : "LOG IN"}
       </button>
       <p onClick={() => setIsSignUp(!isSignUp)} style={{ marginTop: '20px', fontSize: '0.8rem', color: '#666', cursor: 'pointer' }}>
-        {isSignUp ? "Already have an account? Login" : "Need an account? Sign Up"}
+        {isSignUp ? "Back to Login" : "Need Account?"}
       </p>
     </div>
   );
@@ -163,23 +150,28 @@ export default function ChatPage() {
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', position: 'relative' }}>
       
-      {/* プロフィール設定モーダル */}
       {isModalOpen && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ width: '100%', maxWidth: '300px', background: '#1a1a1a', padding: '30px', borderRadius: '25px', border: '2px solid #800000', textAlign: 'center' }}>
-            <label style={{ display: 'block', margin: '0 auto 20px', width: '100px', height: '100px', borderRadius: '50%', border: '2px solid #D4AF37', overflow: 'hidden', cursor: 'pointer', background: '#333' }}>
+            <label style={{ display: 'block', margin: '0 auto 20px', width: '100px', height: '100px', borderRadius: '50%', border: '2px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
               {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt=""/> : <InitialAvatar name={profile.username} size="100px" fontSize="3rem" />}
-              <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
+              <input type="file" accept="image/*" onChange={async (e)=>{
+                const f=e.target.files[0]; if(!f)return;
+                const p=`avatars/${user.id}`;
+                await supabase.storage.from('chat-images').upload(p,f,{upsert:true});
+                const {data:{publicUrl:u}}=supabase.storage.from('chat-images').getPublicUrl(p);
+                setProfile({...profile, avatar_url:u});
+              }} style={{ display: 'none' }} />
             </label>
             <input value={profile.username} onChange={e => setProfile({ ...profile, username: e.target.value })} placeholder="Name" style={{ width: '100%', padding: '10px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px', textAlign: 'center' }} />
             <button onClick={saveProfile} style={{ width: '100%', padding: '10px', background: '#800000', color: '#fff', border: 'none', fontWeight: 'bold' }}>SAVE</button>
-            <button onClick={() => setIsModalOpen(false)} style={{ marginTop: '10px', background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}>CLOSE</button>
+            <button onClick={() => setIsModalOpen(false)} style={{ marginTop: '10px', background: 'none', border: 'none', color: '#666' }}>CLOSE</button>
           </div>
         </div>
       )}
 
       <header style={{ padding: '10px 25px', background: '#800000', display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '80px', borderBottom: '2px solid #D4AF37' }}>
-        <h1 style={{ fontSize: '2.2rem', fontFamily: '"Times New Roman", serif', fontStyle: 'italic', letterSpacing: '2px' }}>for VAU</h1>
+        <h1 style={{ fontSize: '2.2rem', fontFamily: '"Times New Roman", serif', fontStyle: 'italic' }}>for VAU</h1>
         <div onClick={() => setIsModalOpen(true)} style={{ cursor: 'pointer' }}>
           {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '48px', height: '48px', borderRadius: '50%', border: '2px solid #D4AF37', objectFit: 'cover' }} alt=""/> : <InitialAvatar name={profile.username} />}
         </div>
@@ -190,7 +182,7 @@ export default function ChatPage() {
           const isMe = m.user_id === user.id;
           return (
             <div key={m.id} style={{ marginBottom: '20px', textAlign: isMe ? 'right' : 'left' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: '4px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div style={{ 
                   padding: m.is_image ? '5px' : '10px 16px', 
                   background: isMe ? '#800000' : '#333', 
@@ -199,10 +191,7 @@ export default function ChatPage() {
                 }}>
                   {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '12px', display: 'block' }} alt=""/> : m.content}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  {isMe && m.is_read && <span style={{ fontSize: '12px', color: '#D4AF37', fontWeight: 'bold' }}>✓</span>}
-                  <span style={{ fontSize: '0.6rem', color: '#ccc' }}>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                </div>
+                <span style={{ fontSize: '0.6rem', color: '#ccc', marginTop: '4px' }}>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
               </div>
             </div>
           )
@@ -216,13 +205,12 @@ export default function ChatPage() {
           <input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
         </label>
         <textarea 
-          ref={textareaRef}
           value={inputText} 
           onChange={e => setInputText(e.target.value)} 
           placeholder="Message..." 
-          style={{ flex: 1, padding: '8px 18px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.3)', outline: 'none', resize: 'none', height: '38px', background: '#800000', color: '#fff', fontSize: '14px' }} 
+          style={{ flex: 1, padding: '8px 18px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.3)', outline: 'none', resize: 'none', height: '38px', background: '#800000', color: '#fff' }} 
         />
-        <button onClick={() => handleSend()} style={{ background: '#000', color: '#D4AF37', width: '60px', height: '38px', borderRadius: '20px', border: 'none', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer' }}>SEND</button>
+        <button onClick={() => handleSend()} style={{ background: '#000', color: '#D4AF37', width: '60px', height: '38px', borderRadius: '20px', border: 'none', fontSize: '11px', fontWeight: 'bold' }}>SEND</button>
       </div>
     </div>
   );
