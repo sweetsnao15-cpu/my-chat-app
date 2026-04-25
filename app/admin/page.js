@@ -99,4 +99,45 @@ export default function AdminPage() {
       {/* メインチャット画面 */}
       <div style={mainStyle}>
         <div style={headerStyle}>
-          <span>{viewMode === 'dm' ? (selectedUserId ? `${userList[selectedUserId]?.userName} とのチャ
+          <span>{viewMode === 'dm' ? (selectedUserId ? `${userList[selectedUserId]?.userName} とのチャット` : 'ユーザーを選択してください') : '全体コメント（新着順）'}</span>
+        </div>
+
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+          {messages
+            .filter(msg => {
+              if (viewMode === 'comment') return true;
+              return msg.user_id === selectedUserId || (msg.user_id === ADMIN_ID && msg.recipient_id === selectedUserId);
+            })
+            .map((msg) => {
+              const isAdmin = msg.user_id === ADMIN_ID;
+              return (
+                <div key={msg.id} style={{ display: 'flex', justifyContent: isAdmin ? 'flex-end' : 'flex-start', marginBottom: '15px', alignItems: 'flex-end' }}>
+                  {!isAdmin && <img src={msg.user_icon || 'https://www.gravatar.com/avatar/0?d=mp'} style={{ width: '35px', height: '35px', borderRadius: '50%', marginRight: '8px', border: '1px solid #ddd' }} alt="" />}
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isAdmin ? 'flex-end' : 'flex-start', maxWidth: '70%' }}>
+                    {!isAdmin && viewMode === 'comment' && <span style={{ fontSize: '11px', color: '#555', marginLeft: '5px', marginBottom: '2px' }}>{msg.user_name}</span>}
+                    
+                    <div style={{
+                      ...bubbleBase,
+                      backgroundColor: isAdmin ? '#85e249' : '#fff', // 管理者は黄緑、ゲストは白
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                      color: '#000',
+                      borderRadius: isAdmin ? '18px 18px 2px 18px' : '18px 18px 18px 2px'
+                    }}>
+                      {msg.content}
+                      {msg.image_url && <img src={msg.image_url} style={{ width: '100%', marginTop: '8px', borderRadius: '8px' }} alt="" />}
+                    </div>
+                    
+                    <span style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
+                      {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
