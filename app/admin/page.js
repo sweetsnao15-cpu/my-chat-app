@@ -8,31 +8,32 @@ export default function AdminPage() {
   const [messages, setMessages] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null); 
   const [viewMode, setViewMode] = useState('dm'); 
+  const [isMobile, setIsMobile] = useState(false);
   const scrollRef = useRef(null);
 
+  // ウィンドウサイズ監視
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const fetchMessages = async () => {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
     if (!error) setMessages(data || []);
   };
 
   useEffect(() => {
     fetchMessages();
-    const channel = supabase
-      .channel('admin-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        setMessages((prev) => [...prev, payload.new]);
-      })
-      .subscribe();
+    const channel = supabase.channel('admin-realtime').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+      setMessages((prev) => [...prev, payload.new]);
+    }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [selectedUserId, viewMode, messages]);
 
   const userList = messages.reduce((acc, msg) => {
@@ -49,96 +50,94 @@ export default function AdminPage() {
   }, {});
 
   const chatList = Object.values(userList).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const isImage = (text) => typeof text === 'string' && text.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) != null;
 
-  const isImage = (text) => {
-    return typeof text === 'string' && text.match(/\.(jpeg|jpg|gif|png|webp|svg)$/i) != null;
-  };
+  const COLORS = { bg: '#000', sidebar: '#0a0a0a', accent: '#D4AF37', danger: '#B22222', text: '#fff', border: '#222' };
 
-  // --- 色の定義 ---
-  const COLORS = {
-    bg: '#000000',
-    sidebar: '#0a0a0a',
-    accent: '#D4AF37', // 金
-    danger: '#B22222', // 赤 (Firebrick)
-    text: '#ffffff',
-    border: '#222222'
+  // --- スワイプ戻り処理（スマホ用） ---
+  const [touchStart, setTouchStart] = useState(null);
+  const handleTouchStart = (e) => setTouchStart(e.targetTouches[0].clientX);
+  const handleTouchMove = (e) => {
+    if (touchStart !== null && e.targetTouches[0].clientX - touchStart > 100) {
+      setSelectedUserId(null); // 右スワイプでリストに戻る
+      setTouchStart(null);
+    }
   };
 
   return (
-    <div style={{ display: 'flex', height: '100vh', backgroundColor: COLORS.bg, color: COLORS.text, fontFamily: '"Hiragino Kaku Gothic ProN", Meiryo, sans-serif' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: COLORS.bg, color: COLORS.text, fontFamily: 'sans-serif', overflow: 'hidden' }}>
       
-      {/* サイドバー */}
-      <div style={{ width: '320px', backgroundColor: COLORS.sidebar, borderRight: `1px solid ${COLORS.border}`, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '30px 20px', borderBottom: `2px solid ${COLORS.danger}` }}>
-          <h2 style={{ fontSize: '12px', color: COLORS.accent, letterSpacing: '4px', textAlign: 'center', marginBottom: '20px' }}>ADMIN PANEL</h2>
-          <div style={{ display: 'flex', gap: '8px', backgroundColor: '#1a1a1a', padding: '4px', borderRadius: '4px' }}>
-            <button onClick={() => setViewMode('dm')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', backgroundColor: viewMode === 'dm' ? COLORS.danger : 'transparent', color: '#fff', fontWeight: 'bold', transition: '0.3s' }}>DM</button>
-            <button onClick={() => setViewMode('comment')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', backgroundColor: viewMode === 'comment' ? COLORS.danger : 'transparent', color: '#fff', fontWeight: 'bold', transition: '0.3s' }}>ALL</button>
-          </div>
-        </div>
-
-        <div style={{ overflowY: 'auto' }}>
-          {viewMode === 'dm' && chatList.map((user) => (
-            <div key={user.userId} onClick={() => setSelectedUserId(user.userId)} style={{ display: 'flex', padding: '15px', cursor: 'pointer', borderBottom: '1px solid #111', backgroundColor: selectedUserId === user.userId ? '#1a0505' : 'transparent', borderLeft: selectedUserId === user.userId ? `4px solid ${COLORS.danger}` : '4px solid transparent', transition: '0.2s' }}>
-              <img src={user.userIcon} style={{ width: '45px', height: '45px', borderRadius: '50%', marginRight: '15px', border: `1px solid ${COLORS.accent}`, objectFit: 'cover' }} alt="" />
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '13px', color: selectedUserId === user.userId ? COLORS.accent : '#fff' }}>{user.userName}</div>
-                <div style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.lastMessage}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* メイン画面 */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: COLORS.bg }}>
-        <div style={{ padding: '20px 25px', borderBottom: '1px solid #1a1a1a', color: COLORS.accent, fontSize: '12px', letterSpacing: '2px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
-          <span>{viewMode === 'dm' ? (selectedUserId ? `LOG: ${userList[selectedUserId]?.userName}` : 'SELECT GUEST') : 'MONITORING ALL'}</span>
-          <span style={{ color: COLORS.danger }}>● LIVE</span>
-        </div>
-
-        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '30px 20px', backgroundImage: `radial-gradient(${COLORS.border} 1px, transparent 1px)`, backgroundSize: '40px 40px' }}>
-          {messages
-            .filter(msg => {
-              if (viewMode === 'comment') return true;
-              return msg.user_id === selectedUserId || (msg.user_id === ADMIN_ID && msg.recipient_id === selectedUserId);
-            })
-            .map((msg) => {
-              const isAdmin = msg.user_id === ADMIN_ID;
-              const isMsgImage = isImage(msg.content);
-
-              return (
-                <div key={msg.id} style={{ display: 'flex', justifyContent: isAdmin ? 'flex-end' : 'flex-start', marginBottom: '30px' }}>
-                  {!isAdmin && (
-                    <img src={msg.avatar_url || userList[msg.user_id]?.userIcon} 
-                         style={{ width: '40px', height: '40px', borderRadius: '50%', marginRight: '15px', border: `1px solid ${COLORS.danger}`, alignSelf: 'flex-start', objectFit: 'cover' }} alt="" />
-                  )}
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isAdmin ? 'flex-end' : 'flex-start', maxWidth: '75%' }}>
-                    {!isAdmin && <span style={{ fontSize: '10px', color: COLORS.accent, marginBottom: '6px', fontWeight: 'bold', letterSpacing: '1px' }}>{msg.username}</span>}
-                    
-                    <div style={{
-                      padding: isMsgImage ? '6px' : '12px 18px', 
-                      borderRadius: isAdmin ? '20px 20px 2px 20px' : '20px 20px 20px 2px',
-                      fontSize: '14px', lineHeight: '1.7',
-                      backgroundColor: isAdmin ? '#000' : '#111', 
-                      color: '#fff',
-                      border: isAdmin ? `1px solid ${COLORS.danger}` : `1px solid ${COLORS.border}`,
-                      boxShadow: isAdmin ? `0 0 20px rgba(178, 34, 34, 0.2)` : 'none'
-                    }}>
-                      {isMsgImage ? (
-                        <img src={msg.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} alt="uploaded" />
-                      ) : (
-                        msg.content
-                      )}
-                    </div>
-                    <span style={{ fontSize: '9px', color: '#555', marginTop: '8px', letterSpacing: '1px' }}>
-                      {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+        
+        {/* サイドバー / ユーザーリスト (スマホで個別チャット中は非表示) */}
+        {(!isMobile || (viewMode === 'dm' && !selectedUserId) || viewMode === 'comment') && (
+          <div style={{ 
+            width: isMobile ? '100%' : '320px', 
+            backgroundColor: COLORS.sidebar, 
+            borderRight: `1px solid ${COLORS.border}`, 
+            display: (isMobile && viewMode === 'comment') ? 'none' : 'flex',
+            flexDirection: 'column' 
+          }}>
+            <div style={{ padding: '20px', borderBottom: `1px solid ${COLORS.danger}`, textAlign: 'center', color: COLORS.accent, fontSize: '12px', letterSpacing: '4px' }}>ADMIN</div>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {viewMode === 'dm' && chatList.map((user) => (
+                <div key={user.userId} onClick={() => setSelectedUserId(user.userId)} style={{ display: 'flex', padding: '15px', cursor: 'pointer', borderBottom: '1px solid #111', backgroundColor: selectedUserId === user.userId ? '#1a0505' : 'transparent', borderLeft: selectedUserId === user.userId ? `4px solid ${COLORS.danger}` : '4px solid transparent' }}>
+                  <img src={user.userIcon} style={{ width: '45px', height: '45px', borderRadius: '50%', marginRight: '15px', border: `1px solid ${COLORS.accent}`, objectFit: 'cover' }} alt="" />
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '13px', color: selectedUserId === user.userId ? COLORS.accent : '#fff' }}>{user.userName}</div>
+                    <div style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.lastMessage}</div>
                   </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* メインチャット画面 */}
+        {(!isMobile || selectedUserId || viewMode === 'comment') && (
+          <div 
+            onTouchStart={handleTouchStart} 
+            onTouchMove={handleTouchMove}
+            style={{ 
+              flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: COLORS.bg,
+              position: isMobile ? 'absolute' : 'relative', width: '100%', height: '100%', top: 0, left: 0,
+              zIndex: (isMobile && selectedUserId) ? 10 : 1
+            }}
+          >
+            <div style={{ padding: '15px', borderBottom: '1px solid #1a1a1a', color: COLORS.accent, fontSize: '12px', display: 'flex', alignItems: 'center' }}>
+              {isMobile && selectedUserId && <span onClick={() => setSelectedUserId(null)} style={{ marginRight: '15px', fontSize: '18px', color: COLORS.danger }}>◀</span>}
+              <span>{viewMode === 'dm' ? (selectedUserId ? `TALK: ${userList[selectedUserId]?.userName}` : 'SELECT GUEST') : 'GLOBAL MONITOR'}</span>
+            </div>
+
+            <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px', backgroundImage: `radial-gradient(${COLORS.border} 1px, transparent 1px)`, backgroundSize: '30px 30px' }}>
+              {messages.filter(msg => viewMode === 'comment' || msg.user_id === selectedUserId || (msg.user_id === ADMIN_ID && msg.recipient_id === selectedUserId)).map((msg) => {
+                const isAdmin = msg.user_id === ADMIN_ID;
+                return (
+                  <div key={msg.id} style={{ display: 'flex', justifyContent: isAdmin ? 'flex-end' : 'flex-start', marginBottom: '25px' }}>
+                    {!isAdmin && <img src={msg.avatar_url || userList[msg.user_id]?.userIcon} style={{ width: '35px', height: '35px', borderRadius: '50%', marginRight: '10px', border: `1px solid ${COLORS.danger}`, alignSelf: 'flex-start', objectFit: 'cover' }} alt="" />}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isAdmin ? 'flex-end' : 'flex-start', maxWidth: '75%' }}>
+                      {!isAdmin && <span style={{ fontSize: '10px', color: COLORS.accent, marginBottom: '4px' }}>{msg.username}</span>}
+                      <div style={{ padding: isImage(msg.content) ? '5px' : '10px 14px', borderRadius: '15px', fontSize: '14px', backgroundColor: isAdmin ? '#000' : '#111', color: '#fff', border: isAdmin ? `1px solid ${COLORS.danger}` : `1px solid ${COLORS.border}` }}>
+                        {isImage(msg.content) ? <img src={msg.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" /> : msg.content}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* --- 画面下の切り替えスイッチ --- */}
+      <div style={{ height: '70px', backgroundColor: '#0a0a0a', borderTop: `1px solid ${COLORS.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-around', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div onClick={() => {setViewMode('dm'); setSelectedUserId(null);}} style={{ textAlign: 'center', cursor: 'pointer', color: viewMode === 'dm' ? COLORS.danger : '#555' }}>
+          <div style={{ fontSize: '20px' }}>👤</div>
+          <div style={{ fontSize: '10px', fontWeight: 'bold' }}>DM型</div>
+        </div>
+        <div onClick={() => {setViewMode('comment'); setSelectedUserId(null);}} style={{ textAlign: 'center', cursor: 'pointer', color: viewMode === 'comment' ? COLORS.danger : '#555' }}>
+          <div style={{ fontSize: '20px' }}>💬</div>
+          <div style={{ fontSize: '10px', fontWeight: 'bold' }}>コメント型</div>
         </div>
       </div>
     </div>
