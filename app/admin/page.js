@@ -15,7 +15,9 @@ export default function AdminPage() {
       .from('messages')
       .select('*')
       .order('created_at', { ascending: true });
-    if (!error) setMessages(data || []);
+    if (!error) {
+      setMessages(data || []);
+    }
   };
 
   useEffect(() => {
@@ -35,12 +37,13 @@ export default function AdminPage() {
     }
   }, [selectedUserId, viewMode, messages]);
 
+  // ユーザーリストの生成（正確な列名 username, avatar_url を使用）
   const userList = messages.reduce((acc, msg) => {
     if (msg.user_id !== ADMIN_ID) {
       acc[msg.user_id] = {
         userId: msg.user_id,
-        userName: msg.user_name || 'ゲスト',
-        userIcon: msg.user_icon || 'https://www.gravatar.com/avatar/0?d=mp',
+        userName: msg.username || 'GUEST',
+        userIcon: msg.avatar_url || 'https://www.gravatar.com/avatar/0?d=mp',
         lastMessage: msg.content,
         timestamp: msg.created_at
       };
@@ -50,55 +53,44 @@ export default function AdminPage() {
 
   const chatList = Object.values(userList).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-  // --- スタイル定義（ゲスト側のシックな黒・金デザインに統一） ---
-  const containerStyle = { display: 'flex', height: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: '"Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif' };
-  const sidebarStyle = { width: '300px', backgroundColor: '#111', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' };
-  const mainStyle = { flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#000', position: 'relative' };
-  const headerStyle = { padding: '15px', backgroundColor: '#111', borderBottom: '1px solid #D4AF37', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#D4AF37' };
-  
+  // メッセージが画像URL（http...で始まり、拡張子が画像）かどうか判定する関数
+  const isImage = (text) => {
+    return typeof text === 'string' && text.match(/\.(jpeg|jpg|gif|png|webp)$/) != null;
+  };
+
   return (
-    <div style={containerStyle}>
+    <div style={{ display: 'flex', height: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'sans-serif' }}>
       
-      {/* 左側サイドバー */}
-      <div style={sidebarStyle}>
-        <div style={{ padding: '20px', borderBottom: '1px solid #333' }}>
-          <h2 style={{ fontSize: '16px', color: '#D4AF37', margin: '0 0 15px 0', textAlign: 'center' }}>CONTROL PANEL</h2>
-          <div style={{ display: 'flex', gap: '5px', backgroundColor: '#222', padding: '3px', borderRadius: '8px' }}>
-            <button 
-              onClick={() => setViewMode('dm')}
-              style={{ flex: 1, padding: '8px', border: 'none', borderRadius: '6px', fontSize: '11px', cursor: 'pointer', backgroundColor: viewMode === 'dm' ? '#D4AF37' : 'transparent', color: viewMode === 'dm' ? '#000' : '#fff', fontWeight: 'bold' }}
-            >DM</button>
-            <button 
-              onClick={() => setViewMode('comment')}
-              style={{ flex: 1, padding: '8px', border: 'none', borderRadius: '6px', fontSize: '11px', cursor: 'pointer', backgroundColor: viewMode === 'comment' ? '#D4AF37' : 'transparent', color: viewMode === 'comment' ? '#000' : '#fff', fontWeight: 'bold' }}
-            >COMMENT</button>
+      {/* サイドバー */}
+      <div style={{ width: '300px', backgroundColor: '#0a0a0a', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '25px 20px', borderBottom: '1px solid #D4AF37' }}>
+          <h2 style={{ fontSize: '12px', color: '#D4AF37', letterSpacing: '4px', textAlign: 'center', marginBottom: '20px', fontWeight: 'normal' }}>MANAGER</h2>
+          <div style={{ display: 'flex', gap: '8px', backgroundColor: '#1a1a1a', padding: '4px', borderRadius: '4px' }}>
+            <button onClick={() => setViewMode('dm')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', backgroundColor: viewMode === 'dm' ? '#D4AF37' : 'transparent', color: viewMode === 'dm' ? '#000' : '#fff', transition: '0.3s' }}>DM</button>
+            <button onClick={() => setViewMode('comment')} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', backgroundColor: viewMode === 'comment' ? '#D4AF37' : 'transparent', color: viewMode === 'comment' ? '#000' : '#fff', transition: '0.3s' }}>ALL</button>
           </div>
         </div>
 
         <div style={{ overflowY: 'auto' }}>
           {viewMode === 'dm' && chatList.map((user) => (
-            <div 
-              key={user.userId} 
-              onClick={() => setSelectedUserId(user.userId)}
-              style={{ display: 'flex', padding: '15px', cursor: 'pointer', borderBottom: '1px solid #222', backgroundColor: selectedUserId === user.userId ? '#222' : 'transparent', transition: '0.2s' }}
-            >
-              <img src={user.userIcon} style={{ width: '40px', height: '40px', borderRadius: '50%', marginRight: '12px', border: '1px solid #D4AF37' }} alt="" />
+            <div key={user.userId} onClick={() => setSelectedUserId(user.userId)} style={{ display: 'flex', padding: '15px', cursor: 'pointer', borderBottom: '1px solid #111', backgroundColor: selectedUserId === user.userId ? '#111' : 'transparent', alignItems: 'center' }}>
+              <img src={user.userIcon} style={{ width: '42px', height: '42px', borderRadius: '50%', marginRight: '15px', border: '1px solid #D4AF37', objectFit: 'cover' }} alt="" />
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '13px', color: selectedUserId === user.userId ? '#D4AF37' : '#fff' }}>{user.userName}</div>
-                <div style={{ fontSize: '11px', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.lastMessage}</div>
+                <div style={{ fontSize: '11px', color: '#666', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.lastMessage}</div>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* 右側メイン画面 */}
-      <div style={mainStyle}>
-        <div style={headerStyle}>
-          <span>{viewMode === 'dm' ? (selectedUserId ? `${userList[selectedUserId]?.userName} との対話` : 'ユーザーを選択してください') : '全コメント表示'}</span>
+      {/* メイン画面 */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#000' }}>
+        <div style={{ padding: '18px 25px', borderBottom: '1px solid #1a1a1a', color: '#D4AF37', fontSize: '12px', letterSpacing: '1px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>{viewMode === 'dm' ? (selectedUserId ? `TALK : ${userList[selectedUserId]?.userName}` : 'SELECT USER') : 'GLOBAL CHAT'}</span>
         </div>
 
-        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px', backgroundImage: 'radial-gradient(#1a1a1a 1px, transparent 1px)', backgroundSize: '20px 20px' }}>
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '30px 20px', backgroundImage: 'radial-gradient(#111 1px, transparent 1px)', backgroundSize: '30px 30px' }}>
           {messages
             .filter(msg => {
               if (viewMode === 'comment') return true;
@@ -106,39 +98,40 @@ export default function AdminPage() {
             })
             .map((msg) => {
               const isAdmin = msg.user_id === ADMIN_ID;
+              const isMsgImage = isImage(msg.content);
+
               return (
-                <div key={msg.id} style={{ display: 'flex', justifyContent: isAdmin ? 'flex-end' : 'flex-start', marginBottom: '20px', alignItems: 'flex-start' }}>
-                  {!isAdmin && <img src={msg.user_icon || 'https://www.gravatar.com/avatar/0?d=mp'} style={{ width: '35px', height: '35px', borderRadius: '50%', marginRight: '10px', border: '1px solid #D4AF37' }} alt="" />}
+                <div key={msg.id} style={{ display: 'flex', justifyContent: isAdmin ? 'flex-end' : 'flex-start', marginBottom: '25px' }}>
+                  {!isAdmin && (
+                    <img src={msg.avatar_url || userList[msg.user_id]?.userIcon || 'https://www.gravatar.com/avatar/0?d=mp'} 
+                         style={{ width: '36px', height: '36px', borderRadius: '50%', marginRight: '12px', border: '1px solid #D4AF37', alignSelf: 'flex-start', objectFit: 'cover' }} alt="" />
+                  )}
                   
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: isAdmin ? 'flex-end' : 'flex-start', maxWidth: '75%' }}>
-                    {!isAdmin && <span style={{ fontSize: '10px', color: '#D4AF37', marginBottom: '4px', marginLeft: '4px' }}>{msg.user_name}</span>}
+                    {!isAdmin && <span style={{ fontSize: '10px', color: '#D4AF37', marginBottom: '6px', fontWeight: 'bold' }}>{msg.username || 'GUEST'}</span>}
                     
                     <div style={{
-                      padding: '10px 14px',
-                      fontSize: '14px',
-                      lineHeight: '1.5',
-                      borderRadius: isAdmin ? '15px 15px 2px 15px' : '15px 15px 15px 2px',
-                      backgroundColor: isAdmin ? '#000' : '#222',
+                      padding: isMsgImage ? '5px' : '12px 16px', 
+                      borderRadius: isAdmin ? '18px 18px 2px 18px' : '18px 18px 18px 2px',
+                      fontSize: '14px', lineHeight: '1.6',
+                      backgroundColor: isAdmin ? '#000' : '#1a1a1a', 
                       color: '#fff',
                       border: isAdmin ? '1px solid #D4AF37' : '1px solid #333',
-                      boxShadow: isAdmin ? '0 0 10px rgba(212, 175, 55, 0.2)' : 'none'
+                      boxShadow: isAdmin ? '0 0 15px rgba(212, 175, 55, 0.1)' : 'none'
                     }}>
-                      {msg.content}
-                      {msg.image_url && (
-                        <div style={{ marginTop: '10px' }}>
-                          <img src={msg.image_url} style={{ width: '100%', borderRadius: '8px', border: '1px solid #444' }} alt="" />
-                        </div>
+                      {isMsgImage ? (
+                        <img src={msg.content} style={{ maxWidth: '100%', borderRadius: '14px', display: 'block' }} alt="sent" />
+                      ) : (
+                        msg.content
                       )}
                     </div>
-                    
-                    <span style={{ fontSize: '9px', color: '#666', marginTop: '4px' }}>
+                    <span style={{ fontSize: '9px', color: '#444', marginTop: '6px' }}>
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                 </div>
               );
-            })
-          }
+            })}
         </div>
       </div>
     </div>
