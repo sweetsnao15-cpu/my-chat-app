@@ -111,4 +111,179 @@ export default function ChatPage() {
     setSetOk(false);
   };
 
-  // ★ 修正ポイント: 管理画面に名前とアイコンを送るように
+  const send = async (img = null) => {
+    if ((!ct.trim() && !img) || !user) return;
+    const t = ct; setCt('');
+    const { error: e } = await supabase.from('messages').insert([{ 
+      content: img || t, 
+      user_id: user.id, 
+      is_image: !!img, 
+      receiver_id: H,
+      username: pr.username || 'GUEST',
+      avatar_url: pr.avatar_url || ''
+    }]);
+    if (e) { alert(e.message); setCt(t); } else loadM(user, isA, true);
+  };
+
+  const up = async (e, isAv = false) => {
+    const f = e.target.files[0]; if (!f) return;
+    const p = `${Math.random()}.${f.name.split('.').pop()}`;
+    await supabase.storage.from('chat-images').upload(p, f);
+    const { data: { publicUrl: u } } = supabase.storage.from('chat-images').getPublicUrl(p);
+    if (isAv) setPr({ ...pr, avatar_url: u }); else send(u);
+  };
+
+  if (ld) return <div style={{ background: '#000', height: '100dvh' }} />;
+
+  if (!user) return (
+    <div style={{ maxWidth: '400px', margin: '100px auto', padding: '30px', background: '#0a0a0a', color: '#fff', borderRadius: '20px', border: '2px solid #800000', textAlign: 'center' }}>
+      <h2 style={{ color: '#800000', fontSize: '1.8rem' }}>{isUp ? "SIGN UP" : "for VAU"}</h2>
+      <input type="email" placeholder="Email" value={em} onChange={e => setEm(e.target.value)} style={{ width: '100%', padding: '12px', margin: '10px 0', background: '#1a1a1a', color: '#fff', border: '1px solid #333', fontSize: '16px' }} />
+      <input type="password" placeholder="Pw" value={pw} onChange={e => setPw(e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '20px', background: '#1a1a1a', color: '#fff', border: '1px solid #333', fontSize: '16px' }} />
+      <button onClick={authAction} style={{ width: '100%', padding: '12px', background: '#800000', border: 'none', color: '#fff', fontWeight: 'bold' }}>{isUp ? "CREATE" : "LOG IN"}</button>
+      <p onClick={() => setIsUp(!isUp)} style={{ marginTop: '20px', fontSize: '0.8rem', color: '#666', cursor: 'pointer' }}>{isUp ? "Back to Login" : "Need Account?"}</p>
+    </div>
+  );
+
+  return (
+    <div style={{ 
+      maxWidth: '600px', margin: '0 auto', height: '100dvh', display: 'flex', flexDirection: 'column', 
+      background: '#000', color: '#fff', position: 'relative', 
+      WebkitTapHighlightColor: 'transparent',
+      WebkitUserSelect: 'none', userSelect: 'none'
+    }}>
+      <header style={{ 
+        padding: '10px 25px 0 25px', 
+        background: '#800000', 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        minHeight: '80px', 
+        borderBottom: '2px solid #D4AF37', 
+        zIndex: 10 
+      }}>
+        <h1 style={{ 
+          fontSize: '2.2rem', 
+          fontWeight: '700', 
+          letterSpacing: '3px', 
+          margin: 0,
+          paddingLeft: '25px',
+          fontFamily: '"Times New Roman", Times, serif', 
+          fontStyle: 'italic',
+          color: '#fff',
+          textShadow: '2px 2px 4px rgba(0,0,0,0.3)'
+        }}>
+          {user.id === H || isA ? "ADMIN" : "for VAU"}
+        </h1>
+        <div onClick={() => setSetOk(true)} style={{ cursor: 'pointer' }}>
+          {pr.avatar_url ? 
+            <img src={pr.avatar_url} style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #D4AF37' }} alt="" /> 
+            : 
+            <InitialAvatar name={pr.username} size="48px" />
+          }
+        </div>
+      </header>
+
+      {menu && (
+        <div onClick={() => setMenu(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#1a1a1a', borderRadius: '24px', width: '260px', overflow: 'hidden', border: '1px solid #333', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+            {!menu.is_image && (
+              <button onClick={() => copyToClipboard(menu.content)} style={{ width: '100%', padding: '16px', background: 'none', border: 'none', color: '#fff', fontSize: '1rem', borderBottom: '1px solid #333' }}>コピー</button>
+            )}
+            <button onClick={() => deleteMsg(menu.id, true)} style={{ width: '100%', padding: '16px', background: 'none', border: 'none', color: '#ff6b6b', fontSize: '1rem', borderBottom: '1px solid #333' }}>送信取消 (全員から)</button>
+            <button onClick={() => deleteMsg(menu.id, false)} style={{ width: '100%', padding: '16px', background: 'none', border: 'none', color: '#fff', fontSize: '1rem' }}>削除 (自分のみ)</button>
+            <button onClick={() => setMenu(null)} style={{ width: '100%', padding: '14px', background: '#222', border: 'none', color: '#999', fontSize: '0.9rem' }}>キャンセル</button>
+          </div>
+        </div>
+      )}
+
+      {setOk && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ width: '100%', maxWidth: '300px', background: '#1a1a1a', padding: '30px', borderRadius: '25px', border: '2px solid #800000', textAlign: 'center' }}>
+            <label style={{ display: 'block', margin: '0 auto 20px', width: '100px', height: '100px', borderRadius: '50%', border: '2px solid #D4AF37', overflow: 'hidden', cursor: 'pointer', position: 'relative' }}>
+              {pr.avatar_url ? <img src={pr.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <InitialAvatar name={pr.username} size="100px" fontSize="3rem" />}
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CameraIcon /></div>
+              <input type="file" accept="image/*" onChange={e => up(e, true)} style={{ display: 'none' }} />
+            </label>
+            <input value={pr.username} onChange={e => setPr({...pr, username: e.target.value})} placeholder="名前" style={{ width: '100%', padding: '10px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px', textAlign: 'center', fontSize: '16px', userSelect: 'text' }} />
+            <button onClick={savePr} style={{ width: '100%', padding: '10px', background: '#800000', color: '#fff', fontWeight: 'bold' }}>SAVE</button>
+            <button onClick={() => setSetOk(false)} style={{ marginTop: '10px', background: 'transparent', color: '#666', border: 'none' }}>CLOSE</button>
+            <button onClick={() => supabase.auth.signOut()} style={{ marginTop: '20px', width: '100%', color: '#ffaaaa', background: 'none', border: 'none', fontSize: '0.8rem' }}>LOGOUT</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+        {ms.map(m => {
+          const isMe = m.user_id === user.id;
+          return (
+            <div key={m.id} style={{ marginBottom: '20px', textAlign: isMe ? 'right' : 'left' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: '4px' }}>
+                <div 
+                  onTouchStart={() => handleTouchStart(m)}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchMove={handleTouchEnd}
+                  onContextMenu={(e) => { e.preventDefault(); setMenu(m); }}
+                  style={{ 
+                    display: 'inline-block', maxWidth: '85%', padding: m.is_image ? '5px' : '10px 16px', 
+                    background: isMe ? '#800000' : '#333', 
+                    borderRadius: isMe ? '18px 18px 0 18px' : '18px 18px 18px 0', 
+                    color: '#fff', 
+                    wordBreak: 'break-all', whiteSpace: 'pre-wrap', textAlign: 'left',
+                    cursor: 'pointer', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', 
+                    userSelect: 'none', touchAction: 'manipulation',
+                    border: isMe ? 'none' : '1px solid #444'
+                  }}>
+                  {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '12px', display: 'block', pointerEvents: 'none' }} alt="" /> : m.content}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {/* 既読チェックマークの表示 */}
+                  {isMe && m.is_read && <span style={{ fontSize: '10px', color: '#D4AF37' }}>✓</span>}
+                  <span style={{ fontSize: '0.5rem', color: '#ccc' }}>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        <div ref={scRef} />
+      </div>
+
+      <div style={{ padding: '15px 20px', background: '#800000', display: 'flex', gap: '10px', alignItems: 'flex-end', borderTop: '2px solid #D4AF37', zIndex: 10 }}>
+        <label style={{ background: '#000', width: '38px', height: '38px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>
+          <CameraIcon /><input type="file" accept="image/*" onChange={up} style={{ display: 'none' }} />
+        </label>
+        {/* 入力欄の縁を背景に馴染ませる設定 */}
+        <textarea 
+          ref={txRef} 
+          value={ct} 
+          onChange={e => setCt(e.target.value)} 
+          placeholder="Message..." 
+          style={{ 
+            flex: 1, padding: '8px 18px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', // 縁の色を調整
+            outline: 'none', resize: 'none', height: '38px', fontSize: '16px', lineHeight: '22px', 
+            userSelect: 'text', WebkitUserSelect: 'text', background: '#fff' 
+          }} 
+        />
+        {/* SENDボタンのフォントと色をヘッダーに統一 */}
+        <button 
+          onClick={() => send()} 
+          style={{ 
+            background: '#000', 
+            color: '#D4AF37', // 金色
+            width: '60px', 
+            height: '38px', 
+            borderRadius: '20px', 
+            border: 'none',
+            fontSize: '11px',
+            fontWeight: '700',
+            letterSpacing: '1px',
+            fontFamily: '"Times New Roman", Times, serif', // ヘッダーと同じフォント
+            fontStyle: 'italic'
+          }}
+        >
+          SEND
+        </button>
+      </div>
+    </div>
+  );
+}
