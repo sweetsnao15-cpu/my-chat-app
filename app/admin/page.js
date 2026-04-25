@@ -1,23 +1,42 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '../../lib/supabase'; // パスを修正済み
+import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56"; // あなたのID
 
 export default function AdminPage() {
   const [messages, setMessages] = useState([]);
-  const [viewType, setViewType] = useState('comment'); // 'comment' or 'dm'
+  const [viewType, setViewType] = useState('comment'); 
   const scrollRef = useRef(null);
+
+  // メッセージ取得関数
+  const fetchMessages = async () => {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .order('created_at', { ascending: true });
+    
+    if (error) {
+      console.error("データ取得エラー:", error);
+    } else {
+      setMessages(data || []);
+    }
+  };
 
   useEffect(() => {
     fetchMessages();
 
-    // リアルタイム更新の購読
+    // リアルタイム受信の設定（修正版）
     const channel = supabase
-      .channel('admin-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-        fetchMessages();
-      })
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'messages' }, 
+        (payload) => {
+          console.log('新着メッセージを受信:', payload.new);
+          setMessages((prev) => [...prev, payload.new]);
+        }
+      )
       .subscribe();
 
     return () => {
@@ -25,17 +44,6 @@ export default function AdminPage() {
     };
   }, []);
 
-  const fetchMessages = async () => {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .order('created_at', { ascending: true });
-    
-    if (error) console.error(error);
-    else setMessages(data || []);
-  };
-
-  // スクロール制御
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -43,94 +51,107 @@ export default function AdminPage() {
   }, [messages]);
 
   return (
-    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '20px' }}>管理画面 (表示切替)</h1>
+    <div style={{ 
+      padding: '10px', 
+      maxWidth: '450px', // ゲスト側のスマホサイズに合わせる
+      margin: '0 auto', 
+      fontFamily: 'sans-serif',
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      <h1 style={{ fontSize: '18px', textAlign: 'center', margin: '10px 0' }}>管理画面</h1>
       
-      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
+      <div style={{ marginBottom: '10px', display: 'flex', gap: '5px', justifyContent: 'center' }}>
         <button 
           onClick={() => setViewType('comment')}
           style={{
-            padding: '10px 20px',
-            backgroundColor: viewType === 'comment' ? '#0070f3' : '#ccc',
-            color: 'white',
+            flex: 1,
+            padding: '8px',
+            fontSize: '12px',
+            backgroundColor: viewType === 'comment' ? '#0070f3' : '#eee',
+            color: viewType === 'comment' ? 'white' : 'black',
             border: 'none',
             borderRadius: '5px',
             cursor: 'pointer'
           }}
         >
-          コメント型
+          コメント形式
         </button>
         <button 
           onClick={() => setViewType('dm')}
           style={{
-            padding: '10px 20px',
-            backgroundColor: viewType === 'dm' ? '#0070f3' : '#ccc',
-            color: 'white',
+            flex: 1,
+            padding: '8px',
+            fontSize: '12px',
+            backgroundColor: viewType === 'dm' ? '#0070f3' : '#eee',
+            color: viewType === 'dm' ? 'white' : 'black',
             border: 'none',
             borderRadius: '5px',
             cursor: 'pointer'
           }}
         >
-          DM型
+          DM形式
         </button>
       </div>
 
       <div 
         ref={scrollRef}
         style={{ 
+          flex: 1,
           border: '1px solid #ddd', 
-          height: '500px', 
           overflowY: 'scroll', 
-          padding: '20px',
+          padding: '15px',
           borderRadius: '10px',
-          backgroundColor: '#f9f9f9'
+          backgroundColor: '#f9f9f9',
+          marginBottom: '20px'
         }}
       >
-        {messages.map((msg) => {
-          const isAdmin = msg.user_id === ADMIN_ID;
-          
-          if (viewType === 'dm') {
-            // DM型の表示
-            return (
-              <div key={msg.id} style={{ 
-                display: 'flex', 
-                justifyContent: isAdmin ? 'flex-end' : 'flex-start',
-                marginBottom: '10px' 
-              }}>
-                <div style={{
-                  maxWidth: '70%',
-                  padding: '10px',
-                  borderRadius: '15px',
-                  backgroundColor: isAdmin ? '#0070f3' : '#e9e9eb',
-                  color: isAdmin ? 'white' : 'black',
+        {messages.length === 0 ? (
+          <p style={{ textAlign: 'center', color: '#999', fontSize: '14px' }}>メッセージがありません</p>
+        ) : (
+          messages.map((msg) => {
+            const isAdmin = msg.user_id === ADMIN_ID;
+            
+            if (viewType === 'dm') {
+              return (
+                <div key={msg.id} style={{ 
+                  display: 'flex', 
+                  justifyContent: isAdmin ? 'flex-end' : 'flex-start',
+                  marginBottom: '8px' 
                 }}>
-                  <div style={{ fontSize: '12px', opacity: 0.7, marginBottom: '4px' }}>
-                    {msg.user_name || 'ゲスト'}
+                  <div style={{
+                    maxWidth: '85%',
+                    padding: '8px 12px',
+                    borderRadius: '18px',
+                    fontSize: '14px',
+                    lineHeight: '1.4',
+                    backgroundColor: isAdmin ? '#0070f3' : '#e9e9eb',
+                    color: isAdmin ? 'white' : 'black',
+                  }}>
+                    {!isAdmin && <div style={{ fontSize: '10px', opacity: 0.6, marginBottom: '2px' }}>{msg.user_name || 'ゲスト'}</div>}
+                    {msg.content}
                   </div>
-                  {msg.content}
                 </div>
-              </div>
-            );
-          } else {
-            // コメント型の表示
-            return (
-              <div key={msg.id} style={{ 
-                marginBottom: '15px', 
-                padding: '10px', 
-                borderBottom: '1px solid #eee',
-                backgroundColor: isAdmin ? '#fff9db' : 'transparent' 
-              }}>
-                <strong style={{ color: isAdmin ? '#f08c00' : '#333' }}>
-                  {msg.user_name || 'ゲスト'} {isAdmin && '(管理者)'}
-                </strong>
-                <p style={{ margin: '5px 0' }}>{msg.content}</p>
-                <small style={{ color: '#999' }}>
-                  {new Date(msg.created_at).toLocaleString('ja-JP')}
-                </small>
-              </div>
-            );
-          }
-        })}
+              );
+            } else {
+              return (
+                <div key={msg.id} style={{ 
+                  marginBottom: '10px', 
+                  padding: '8px', 
+                  fontSize: '14px',
+                  borderBottom: '1px solid #eee',
+                  backgroundColor: isAdmin ? '#fff9db' : 'transparent' 
+                }}>
+                  <strong style={{ fontSize: '12px', color: isAdmin ? '#f08c00' : '#555' }}>
+                    {msg.user_name || 'ゲスト'} {isAdmin && '(管理者)'}
+                  </strong>
+                  <div style={{ margin: '3px 0' }}>{msg.content}</div>
+                </div>
+              );
+            }
+          })
+        )}
       </div>
     </div>
   );
