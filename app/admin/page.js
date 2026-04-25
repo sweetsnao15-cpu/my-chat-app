@@ -8,7 +8,6 @@ export default function AdminPage() {
   const [messages, setMessages] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null); 
   const [viewMode, setViewMode] = useState('dm'); 
-  const [inputText, setInputText] = useState('');
   const scrollRef = useRef(null);
 
   const COLORS = {
@@ -45,45 +44,41 @@ export default function AdminPage() {
   useEffect(() => {
     if (selectedUserId) {
       markAsRead(selectedUserId);
-      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [selectedUserId, messages]);
 
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [selectedUserId, messages]);
+
+  // ユーザーリストの集計（未読数含む）
   const userList = messages.reduce((acc, msg) => {
     if (msg.user_id !== ADMIN_ID && msg.user_id) {
       const isUnread = !msg.is_read && msg.receiver_id === ADMIN_ID;
-      if (!acc[msg.user_id] || new Date(msg.created_at) > new Date(acc[msg.user_id].timestamp)) {
+      if (!acc[msg.user_id]) {
         acc[msg.user_id] = {
           userId: msg.user_id,
           userName: msg.username || 'GUEST',
           userIcon: msg.avatar_url || '',
           lastMessage: msg.content,
           timestamp: msg.created_at,
-          unreadCount: (acc[msg.user_id]?.unreadCount || 0) + (isUnread ? 1 : 0)
+          unreadCount: 0
         };
-      } else if (isUnread) {
+      }
+      if (isUnread) {
         acc[msg.user_id].unreadCount++;
+      }
+      if (new Date(msg.created_at) > new Date(acc[msg.user_id].timestamp)) {
+        acc[msg.user_id].lastMessage = msg.content;
+        acc[msg.user_id].timestamp = msg.created_at;
       }
     }
     return acc;
   }, {});
 
   const chatList = Object.values(userList).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-  const sendMessage = async () => {
-    if (!inputText.trim() || !selectedUserId) return;
-    const content = inputText;
-    setInputText('');
-    const { error } = await supabase.from('messages').insert([{
-      content,
-      user_id: ADMIN_ID,
-      recipient_id: selectedUserId,
-      receiver_id: selectedUserId,
-      username: 'ADMIN',
-      is_read: false
-    }]);
-    if (error) alert(error.message);
-  };
 
   return (
     <div style={{ 
@@ -95,7 +90,8 @@ export default function AdminPage() {
         padding: '10px 25px', background: COLORS.guestRed, borderBottom: `2px solid ${COLORS.accentGold}`,
         display: 'flex', alignItems: 'center', minHeight: '80px', position: 'relative', zIndex: 10 
       }}>
-        <div style={{ width: '40px', display: 'flex', alignItems: 'center' }}>
+        {/* 幅を固定して文字を中央に寄せる */}
+        <div style={{ width: '60px', display: 'flex', alignItems: 'center' }}>
           {selectedUserId && (
             <div onClick={() => setSelectedUserId(null)} style={{ cursor: 'pointer', fontSize: '24px', color: COLORS.accentGold, fontWeight: 'bold' }}>✕</div>
           )}
@@ -107,7 +103,7 @@ export default function AdminPage() {
         }}>
           {viewMode === 'dm' ? (selectedUserId ? userList[selectedUserId]?.userName : "ADMIN") : "GLOBAL"}
         </h1>
-        <div style={{ width: '40px' }} /> {/* 左右のバランスを取るためのダミー */}
+        <div style={{ width: '60px' }} />
       </header>
 
       <div style={{ flex: 1, overflowY: 'auto', position: 'relative', background: '#000' }}>
@@ -124,8 +120,8 @@ export default function AdminPage() {
                   <div style={{ fontWeight: 'bold', fontSize: '15px', color: u.unreadCount > 0 ? COLORS.accentGold : '#fff' }}>{u.userName}</div>
                   <div style={{ fontSize: '12px', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>{u.lastMessage}</div>
                 </div>
-                {/* 開いていない時（selectedUserIdではない時）かつ未読がある時のみバッジを表示 */}
-                {u.unreadCount > 0 && selectedUserId !== u.userId && (
+                {/* 吹き出し数の表示を連動 */}
+                {u.unreadCount > 0 && (
                   <div style={{ background: COLORS.guestRed, color: '#fff', fontSize: '10px', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold', border: `1px solid ${COLORS.accentGold}` }}>{u.unreadCount}</div>
                 )}
               </div>
@@ -137,67 +133,4 @@ export default function AdminPage() {
               const isAdmin = m.user_id === ADMIN_ID;
               return (
                 <div key={m.id} style={{ display: 'flex', justifyContent: isAdmin ? 'flex-end' : 'flex-start', marginBottom: '20px' }}>
-                  {!isAdmin && (
-                    <div style={{ width: '35px', height: '35px', borderRadius: '50%', background: COLORS.accentGold, marginRight: '10px', overflow: 'hidden', border: `1px solid ${COLORS.accentGold}`, alignSelf: 'flex-start' }}>
-                      {m.avatar_url && <img src={m.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
-                    </div>
-                  )}
-                  <div style={{ maxWidth: '80%', display: 'flex', flexDirection: 'column', alignItems: isAdmin ? 'flex-end' : 'flex-start' }}>
-                    {!isAdmin && <span style={{ fontSize: '10px', color: COLORS.accentGold, marginBottom: '4px', fontWeight: 'bold' }}>{m.username}</span>}
-                    <div style={{ position: 'relative' }}>
-                      <div style={{ 
-                        padding: m.is_image ? '5px' : '10px 16px', borderRadius: isAdmin ? '18px 18px 0 18px' : '18px 18px 18px 0',
-                        background: isAdmin ? COLORS.guestRed : '#333', color: '#fff', fontSize: '14px', border: isAdmin ? 'none' : '1px solid #444'
-                      }}>
-                        {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '12px' }} alt="" /> : m.content}
-                      </div>
-                      {isAdmin && m.is_read && (
-                        <span style={{ position: 'absolute', left: '-20px', bottom: '2px', fontSize: '12px', color: COLORS.accentGold }}>✓</span>
-                      )}
-                    </div>
-                    <span style={{ fontSize: '8px', color: '#666', marginTop: '4px' }}>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {selectedUserId && (
-        <div style={{ padding: '15px 20px', background: COLORS.guestRed, display: 'flex', gap: '10px', borderTop: `2px solid ${COLORS.accentGold}` }}>
-          <textarea 
-            value={inputText} 
-            onChange={(e) => setInputText(e.target.value)} 
-            placeholder="管理者として返信..." 
-            style={{ 
-              flex: 1, padding: '10px 15px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.3)', 
-              outline: 'none', resize: 'none', height: '40px', fontSize: '14px', background: COLORS.guestRed, color: '#fff' 
-            }} 
-          />
-          <button 
-            onClick={sendMessage} 
-            style={{ 
-              background: '#000', color: COLORS.accentGold, width: '60px', height: '40px', borderRadius: '20px', border: 'none', 
-              fontWeight: 'bold', fontSize: '11px', fontFamily: '"Times New Roman", serif', fontStyle: 'italic'
-            }}
-          >
-            SEND
-          </button>
-        </div>
-      )}
-
-      <footer style={{ 
-        height: '70px', background: COLORS.guestRed, borderTop: `2px solid ${COLORS.accentGold}`,
-        display: 'flex', alignItems: 'center', paddingBottom: 'env(safe-area-inset-bottom)'
-      }}>
-        <div onClick={() => {setViewMode('dm'); setSelectedUserId(null);}} style={{ flex: 1, textAlign: 'center', cursor: 'pointer', opacity: viewMode === 'dm' ? 1 : 0.4 }}>
-          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', letterSpacing: '2px' }}>DIRECT</div>
-        </div>
-        <div onClick={() => {setViewMode('comment'); setSelectedUserId(null);}} style={{ flex: 1, textAlign: 'center', cursor: 'pointer', opacity: viewMode === 'comment' ? 1 : 0.4 }}>
-          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', letterSpacing: '2px' }}>GLOBAL</div>
-        </div>
-      </footer>
-    </div>
-  );
-}
+                  {!isAdmin &&
