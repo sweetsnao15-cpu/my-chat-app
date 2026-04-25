@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '../../lib/supabase'; // パスを修正しました
+import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
@@ -114,7 +114,7 @@ export default function AdminPage() {
                 display: 'flex', padding: '20px 15px', alignItems: 'center', borderBottom: `1px solid ${COLORS.darkBorder}`
               }}>
                 <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: COLORS.accentGold, marginRight: '15px', border: `2px solid ${COLORS.accentGold}`, overflow: 'hidden' }}>
-                  {u.userIcon ? <img src={u.userIcon} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ textAlign: 'center', lineHeight: '50px', fontWeight: 'bold' }}>V</div>}
+                  {u.userIcon ? <img src={u.userIcon} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <div style={{ textAlign: 'center', lineHeight: '50px', fontWeight: 'bold' }}>V</div>}
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 'bold', fontSize: '15px', color: u.unreadCount > 0 ? COLORS.accentGold : '#fff' }}>{u.userName}</div>
@@ -134,7 +134,7 @@ export default function AdminPage() {
                 <div key={m.id} style={{ display: 'flex', justifyContent: isAdmin ? 'flex-end' : 'flex-start', marginBottom: '20px' }}>
                   {!isAdmin && (
                     <div style={{ width: '35px', height: '35px', borderRadius: '50%', background: COLORS.accentGold, marginRight: '10px', overflow: 'hidden', border: `1px solid ${COLORS.accentGold}`, alignSelf: 'flex-start' }}>
-                      {m.avatar_url && <img src={m.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                      {m.avatar_url && <img src={m.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
                     </div>
                   )}
                   <div style={{ maxWidth: '80%', display: 'flex', flexDirection: 'column', alignItems: isAdmin ? 'flex-end' : 'flex-start' }}>
@@ -144,7 +144,7 @@ export default function AdminPage() {
                         padding: m.is_image ? '5px' : '10px 16px', borderRadius: isAdmin ? '18px 18px 0 18px' : '18px 18px 18px 0',
                         background: isAdmin ? COLORS.guestRed : '#333', color: '#fff', fontSize: '14px', border: isAdmin ? 'none' : '1px solid #444'
                       }}>
-                        {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '12px' }} /> : m.content}
+                        {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '12px' }} alt="" /> : m.content}
                       </div>
                       {isAdmin && m.is_read && (
                         <span style={{ position: 'absolute', left: '-20px', bottom: '2px', fontSize: '10px', color: COLORS.accentGold }}>✓</span>
@@ -182,17 +182,16 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* フッター：アイコンを削除し文字のみに調整 */}
       <footer style={{ 
-        height: '80px', background: COLORS.guestRed, borderTop: `2px solid ${COLORS.accentGold}`,
+        height: '70px', background: COLORS.guestRed, borderTop: `2px solid ${COLORS.accentGold}`,
         display: 'flex', alignItems: 'center', paddingBottom: 'env(safe-area-inset-bottom)'
       }}>
         <div onClick={() => {setViewMode('dm'); setSelectedUserId(null);}} style={{ flex: 1, textAlign: 'center', cursor: 'pointer', opacity: viewMode === 'dm' ? 1 : 0.4 }}>
-          <div style={{ fontSize: '20px' }}>👤</div>
-          <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#fff' }}>DIRECT</div>
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', letterSpacing: '2px' }}>DIRECT</div>
         </div>
         <div onClick={() => {setViewMode('comment'); setSelectedUserId(null);}} style={{ flex: 1, textAlign: 'center', cursor: 'pointer', opacity: viewMode === 'comment' ? 1 : 0.4 }}>
-          <div style={{ fontSize: '20px' }}>💬</div>
-          <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#fff' }}>GLOBAL</div>
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff', letterSpacing: '2px' }}>GLOBAL</div>
         </div>
       </footer>
     </div>
