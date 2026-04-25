@@ -237,7 +237,6 @@ export default function ChatPage() {
                   {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '12px', display: 'block', pointerEvents: 'none' }} alt="" /> : m.content}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  {/* 既読チェックマークの表示 */}
                   {isMe && m.is_read && <span style={{ fontSize: '10px', color: '#D4AF37' }}>✓</span>}
                   <span style={{ fontSize: '0.5rem', color: '#ccc' }}>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                 </div>
@@ -252,24 +251,35 @@ export default function ChatPage() {
         <label style={{ background: '#000', width: '38px', height: '38px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>
           <CameraIcon /><input type="file" accept="image/*" onChange={up} style={{ display: 'none' }} />
         </label>
-        {/* 入力欄の縁を背景に馴染ませる設定 */}
+        
+        {/* 入力エリアの修正箇所 */}
         <textarea 
           ref={txRef} 
           value={ct} 
           onChange={e => setCt(e.target.value)} 
           placeholder="Message..." 
           style={{ 
-            flex: 1, padding: '8px 18px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', // 縁の色を調整
-            outline: 'none', resize: 'none', height: '38px', fontSize: '16px', lineHeight: '22px', 
-            userSelect: 'text', WebkitUserSelect: 'text', background: '#fff' 
+            flex: 1, 
+            padding: '8px 18px', 
+            borderRadius: '20px', 
+            border: '1px solid rgba(255, 255, 255, 0.3)', // 縁を半透明の白に
+            outline: 'none', 
+            resize: 'none', 
+            height: '38px', 
+            fontSize: '16px', 
+            lineHeight: '22px', 
+            userSelect: 'text', 
+            WebkitUserSelect: 'text', 
+            background: '#800000', // 内側を赤色に
+            color: '#FFFFFF'       // 入力文字を白色に
           }} 
         />
-        {/* SENDボタンのフォントと色をヘッダーに統一 */}
+        
         <button 
           onClick={() => send()} 
           style={{ 
             background: '#000', 
-            color: '#D4AF37', // 金色
+            color: '#D4AF37', 
             width: '60px', 
             height: '38px', 
             borderRadius: '20px', 
@@ -277,13 +287,20 @@ export default function ChatPage() {
             fontSize: '11px',
             fontWeight: '700',
             letterSpacing: '1px',
-            fontFamily: '"Times New Roman", Times, serif', // ヘッダーと同じフォント
+            fontFamily: '"Times New Roman", Times, serif', 
             fontStyle: 'italic'
           }}
         >
           SEND
         </button>
       </div>
+      
+      {/* プレースホルダーの色を白系にするためのスタイル */}
+      <style jsx>{`
+        textarea::placeholder {
+          color: rgba(255, 255, 255, 0.6);
+        }
+      `}</style>
     </div>
   );
 }
