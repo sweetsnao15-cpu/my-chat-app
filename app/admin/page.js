@@ -95,15 +95,19 @@ export default function AdminPage() {
         padding: '10px 25px', background: COLORS.guestRed, borderBottom: `2px solid ${COLORS.accentGold}`,
         display: 'flex', alignItems: 'center', minHeight: '80px', position: 'relative', zIndex: 10 
       }}>
-        {selectedUserId && (
-          <div onClick={() => setSelectedUserId(null)} style={{ position: 'absolute', left: '15px', cursor: 'pointer', fontSize: '18px', color: COLORS.accentGold }}>✕</div>
-        )}
+        <div style={{ width: '40px', display: 'flex', alignItems: 'center' }}>
+          {selectedUserId && (
+            <div onClick={() => setSelectedUserId(null)} style={{ cursor: 'pointer', fontSize: '24px', color: COLORS.accentGold, fontWeight: 'bold' }}>✕</div>
+          )}
+        </div>
         <h1 style={{ 
           flex: 1, textAlign: 'center', fontSize: '2.2rem', fontWeight: '700', letterSpacing: '3px',
-          fontFamily: '"Times New Roman", Times, serif', fontStyle: 'italic', textShadow: '2px 2px 4px rgba(0,0,0,0.3)'
+          fontFamily: '"Times New Roman", Times, serif', fontStyle: 'italic', textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+          margin: 0
         }}>
           {viewMode === 'dm' ? (selectedUserId ? userList[selectedUserId]?.userName : "ADMIN") : "GLOBAL"}
         </h1>
+        <div style={{ width: '40px' }} /> {/* 左右のバランスを取るためのダミー */}
       </header>
 
       <div style={{ flex: 1, overflowY: 'auto', position: 'relative', background: '#000' }}>
@@ -118,10 +122,11 @@ export default function AdminPage() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 'bold', fontSize: '15px', color: u.unreadCount > 0 ? COLORS.accentGold : '#fff' }}>{u.userName}</div>
-                  <div style={{ fontSize: '12px', color: '#888' }}>{u.lastMessage}</div>
+                  <div style={{ fontSize: '12px', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>{u.lastMessage}</div>
                 </div>
-                {u.unreadCount > 0 && (
-                  <div style={{ background: COLORS.guestRed, color: '#fff', fontSize: '10px', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>{u.unreadCount}</div>
+                {/* 開いていない時（selectedUserIdではない時）かつ未読がある時のみバッジを表示 */}
+                {u.unreadCount > 0 && selectedUserId !== u.userId && (
+                  <div style={{ background: COLORS.guestRed, color: '#fff', fontSize: '10px', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold', border: `1px solid ${COLORS.accentGold}` }}>{u.unreadCount}</div>
                 )}
               </div>
             ))}
@@ -147,7 +152,7 @@ export default function AdminPage() {
                         {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '12px' }} alt="" /> : m.content}
                       </div>
                       {isAdmin && m.is_read && (
-                        <span style={{ position: 'absolute', left: '-20px', bottom: '2px', fontSize: '10px', color: COLORS.accentGold }}>✓</span>
+                        <span style={{ position: 'absolute', left: '-20px', bottom: '2px', fontSize: '12px', color: COLORS.accentGold }}>✓</span>
                       )}
                     </div>
                     <span style={{ fontSize: '8px', color: '#666', marginTop: '4px' }}>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
@@ -166,8 +171,8 @@ export default function AdminPage() {
             onChange={(e) => setInputText(e.target.value)} 
             placeholder="管理者として返信..." 
             style={{ 
-              flex: 1, padding: '10px 15px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', 
-              outline: 'none', resize: 'none', height: '40px', fontSize: '14px', background: '#fff' 
+              flex: 1, padding: '10px 15px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.3)', 
+              outline: 'none', resize: 'none', height: '40px', fontSize: '14px', background: COLORS.guestRed, color: '#fff' 
             }} 
           />
           <button 
@@ -182,7 +187,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* フッター：アイコンを削除し文字のみに調整 */}
       <footer style={{ 
         height: '70px', background: COLORS.guestRed, borderTop: `2px solid ${COLORS.accentGold}`,
         display: 'flex', alignItems: 'center', paddingBottom: 'env(safe-area-inset-bottom)'
