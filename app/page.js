@@ -35,14 +35,13 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(true);
   
   const scrollRef = useRef(null);
-  const textareaRef = useRef(null); // 入力欄高さ調整用
+  const textareaRef = useRef(null);
 
-  // --- 入力欄の高さを自動調整する処理 ---
+  // 入力欄の高さ自動調整
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = "42px"; // 一旦リセット
+      textareaRef.current.style.height = "42px";
       const scrollHeight = textareaRef.current.scrollHeight;
-      // 最大150pxまで伸びるように設定
       textareaRef.current.style.height = Math.min(scrollHeight, 150) + "px";
     }
   }, [inputText]);
@@ -126,8 +125,9 @@ export default function ChatPage() {
   );
 
   return (
-    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff' }}>
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', position: 'relative' }}>
       
+      {/* 設定モーダル */}
       {isModalOpen && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ width: '100%', maxWidth: '320px', background: '#1a1a1a', padding: '30px', borderRadius: '25px', border: '2px solid #800000', textAlign: 'center' }}>
@@ -149,13 +149,24 @@ export default function ChatPage() {
         </div>
       )}
 
-      <header style={{ padding: '10px 25px 10px 45px', background: '#800000', display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '85px', borderBottom: '2px solid #D4AF37', flexShrink: 0 }}>
+      {/* ヘッダー：padding-topを増やして「for VAU」とアイコンを少し下にずらしました */}
+      <header style={{ 
+        padding: '25px 25px 10px 45px', // 上部を10pxから25pxに増やしました
+        background: '#800000', 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        minHeight: '95px', // 高さを少し確保
+        borderBottom: '2px solid #D4AF37', 
+        flexShrink: 0 
+      }}>
         <h1 style={{ fontSize: '2.4rem', fontFamily: 'serif', fontStyle: 'italic', margin: 0, letterSpacing: '1px' }}>for VAU</h1>
         <div onClick={() => setIsModalOpen(true)} style={{ cursor: 'pointer' }}>
           {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '50px', height: '50px', borderRadius: '50%', border: '2px solid #D4AF37', objectFit: 'cover' }} alt=""/> : <InitialAvatar name={profile.username} />}
         </div>
       </header>
 
+      {/* チャットエリア */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
         {messages.map(m => {
           const isMe = m.user_id === user.id;
@@ -173,12 +184,12 @@ export default function ChatPage() {
         <div ref={scrollRef} />
       </div>
 
+      {/* フッター */}
       <div style={{ padding: '15px 20px', background: '#800000', display: 'flex', gap: '12px', alignItems: 'flex-end', borderTop: '2px solid #D4AF37', paddingBottom: 'calc(15px + env(safe-area-inset-bottom))' }}>
         <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginBottom: '2px' }}>
           <CameraIcon /><input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
         </label>
         
-        {/* 高さが自動で変わるtextarea */}
         <textarea 
           ref={textareaRef}
           value={inputText} 
