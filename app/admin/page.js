@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 
-const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
+const ADMIN_ID = "448cd44f-932c-47e7-aa9f-98437ebd655a";
 
 const GuestAvatarWithBadge = ({ profile, unreadCount, size = '50px', isSelected }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "G";
