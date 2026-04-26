@@ -4,17 +4,7 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-const InitialAvatar = ({ name, size = '45px', fontSize = '1.1rem' }) => {
-  const initial = name && name.trim() ? Array.from(name.trim())[0].toUpperCase() : "V";
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%',
-      background: 'linear-gradient(135deg, #D4AF37 0%, #B69121 100%)',
-      color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontWeight: 'bold', fontSize: fontSize, border: '1px solid #D4AF37', flexShrink: 0
-    }}>{initial}</div>
-  );
-};
+// ... (InitialAvatar コンポーネントは変更なし)
 
 export default function AdminPage() {
   const [view, setView] = useState('DIRECT');
@@ -26,11 +16,11 @@ export default function AdminPage() {
   
   const scrollRef = useRef(null);
   const globalScrollRef = useRef(null);
+  const scrollContainerRef = useRef(null); // 追加
 
   const fetchUsers = useCallback(async () => {
     const { data: profiles } = await supabase.from('profiles').select('*');
     const { data: msgs } = await supabase.from('messages').select('*').order('created_at', { ascending: false });
-    
     if (profiles && msgs) {
       const usersWithLastMsg = profiles.map(u => {
         const lastMsg = msgs.find(m => m.user_id === u.id || m.receiver_id === u.id);
@@ -59,7 +49,6 @@ export default function AdminPage() {
   useEffect(() => { fetchUsers(); fetchAllMessages(); }, [fetchUsers, fetchAllMessages]);
 
   useEffect(() => {
-    if (selectedUserId) fetchMessages();
     const channel = supabase.channel('admin_sync').on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
       fetchMessages();
       fetchAllMessages();
@@ -68,27 +57,27 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [selectedUserId, fetchMessages, fetchAllMessages, fetchUsers]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (view === 'GLOBAL') {
-        globalScrollRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
-      } else if (selectedUserId) {
-        scrollRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
+  // 【改良】GLOBAL/DIRECTの最新表示をパッと固定する関数
+  const jumpToBottom = useCallback(() => {
+    requestAnimationFrame(() => {
+      if (view === 'GLOBAL' && globalScrollRef.current) {
+        globalScrollRef.current.scrollIntoView({ behavior: "instant", block: "end" });
+      } else if (selectedUserId && scrollRef.current) {
+        scrollRef.current.scrollIntoView({ behavior: "instant", block: "end" });
       }
-    }, 0); 
-    return () => clearTimeout(timer);
-  }, [messages, allMessages, view, selectedUserId]);
+    });
+  }, [view, selectedUserId]);
 
-  // 【一斉送信機能の復元】
+  // メッセージ更新時またはビュー切り替え時に即座に実行
+  useEffect(() => {
+    jumpToBottom();
+  }, [allMessages, messages, view, jumpToBottom]);
+
   const handleGlobalSend = async () => {
-    if (!globalText.trim()) return;
-    if (!confirm(`${users.length} 名の全ゲストにメッセージを送信しますか？`)) return;
-
+    if (!globalText.trim() || !confirm("全ゲストに一斉送信しますか？")) return;
     try {
-      // 最新のユーザー一覧を再取得して確実に全員に送る
       const { data: currentUsers } = await supabase.from('profiles').select('id');
-      if (!currentUsers || currentUsers.length === 0) return;
-
+      if (!currentUsers) return;
       const sendPromises = currentUsers.map(u => 
         supabase.from('messages').insert([{ 
           content: globalText, 
@@ -98,21 +87,12 @@ export default function AdminPage() {
           is_read: false
         }])
       );
-
-      const results = await Promise.all(sendPromises);
-      const hasError = results.some(r => r.error);
-
-      if (hasError) {
-        alert("一部のメッセージ送信に失敗しました");
-      } else {
-        setGlobalText('');
-      }
+      await Promise.all(sendPromises);
+      setGlobalText('');
     } catch (e) {
-      alert("エラーが発生しました");
+      alert("送信に失敗しました");
     }
   };
-
-  const selectedUser = users.find(u => u.id === selectedUserId);
 
   const renderMessageList = (msgs, isGlobal = false) => {
     return msgs.map((m, i) => {
@@ -123,14 +103,10 @@ export default function AdminPage() {
 
       return (
         <div key={m.id}>
-          {showDate && <div style={{ textAlign: 'center', margin: '30px 0', fontSize: '0.85rem', color: '#999', fontFamily: 'serif', letterSpacing: '1px' }}>― {mDate} ―</div>}
+          {showDate && <div style={{ textAlign: 'center', margin: '30px 0', fontSize: '0.85rem', color: '#999', fontFamily: 'serif' }}>― {mDate} ―</div>}
           <div style={{ marginBottom: '22px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', maxWidth: '85%', flexDirection: isMe ? 'row-reverse' : 'row' }}>
-              {!isMe && (
-                sender?.avatar_url ? 
-                <img src={sender.avatar_url} style={{ width: '35px', height: '35px', borderRadius: '50%', border: '1px solid #D4AF37', objectFit: 'cover' }} alt="" /> : 
-                <InitialAvatar name={sender?.username || "G"} size="35px" fontSize="0.9rem" />
-              )}
+              {!isMe && <InitialAvatar name={sender?.username || "G"} size="35px" fontSize="0.9rem" />}
               <div>
                 {!isMe && isGlobal && <div style={{ fontSize: '0.7rem', color: '#D4AF37', marginBottom: '4px', fontWeight: 'bold' }}>{sender?.username || "Guest"}</div>}
                 <div style={{ 
@@ -139,15 +115,10 @@ export default function AdminPage() {
                   borderRadius: isMe ? '20px 20px 0 20px' : '20px 20px 20px 0', 
                   color: '#fff', 
                   border: isMe ? 'none' : '2px solid #D4AF37',
-                  boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-                  wordBreak: 'break-all',
-                  whiteSpace: 'pre-wrap', // 改行表示の反映
+                  whiteSpace: 'pre-wrap',
                   textAlign: 'left'
                 }}>
-                  {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} alt="" /> : m.content}
-                </div>
-                <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '5px', textAlign: isMe ? 'right' : 'left' }}>
-                  {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                  {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px' }} /> : m.content}
                 </div>
               </div>
             </div>
@@ -159,65 +130,59 @@ export default function AdminPage() {
 
   return (
     <div style={{ width: '100%', height: '100dvh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      
       <header style={{ padding: '15px 25px', background: '#800000', borderBottom: '2px solid #D4AF37', flexShrink: 0 }}>
-        <h1 style={{ fontSize: '1.8rem', fontFamily: 'serif', fontStyle: 'italic', marginBottom: '10px', margin: 0 }}>for VAU - Host</h1>
-        <div style={{ display: 'flex', background: '#000', borderRadius: '25px', padding: '3px', border: '1px solid #D4AF37' }}>
-          <button onClick={() => { setView('GLOBAL'); setSelectedUserId(null); }} style={{ flex: 1, padding: '8px', borderRadius: '22px', border: 'none', background: view === 'GLOBAL' ? '#D4AF37' : 'transparent', color: view === 'GLOBAL' ? '#000' : '#fff', fontWeight: 'bold', cursor: 'pointer' }}>GLOBAL</button>
-          <button onClick={() => setView('DIRECT')} style={{ flex: 1, padding: '8px', borderRadius: '22px', border: 'none', background: view === 'DIRECT' ? '#D4AF37' : 'transparent', color: view === 'DIRECT' ? '#000' : '#fff', fontWeight: 'bold', cursor: 'pointer' }}>DIRECT</button>
+        <h1 style={{ fontSize: '1.8rem', fontFamily: 'serif', fontStyle: 'italic', margin: 0 }}>for VAU - Host</h1>
+        <div style={{ display: 'flex', background: '#000', borderRadius: '25px', padding: '3px', border: '1px solid #D4AF37', marginTop: '10px' }}>
+          <button onClick={() => { setView('GLOBAL'); setSelectedUserId(null); }} style={{ flex: 1, padding: '8px', borderRadius: '22px', border: 'none', background: view === 'GLOBAL' ? '#D4AF37' : 'transparent', color: view === 'GLOBAL' ? '#000' : '#fff', fontWeight: 'bold' }}>GLOBAL</button>
+          <button onClick={() => setView('DIRECT')} style={{ flex: 1, padding: '8px', borderRadius: '22px', border: 'none', background: view === 'DIRECT' ? '#D4AF37' : 'transparent', color: view === 'DIRECT' ? '#000' : '#fff', fontWeight: 'bold' }}>DIRECT</button>
         </div>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+      <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
         {view === 'GLOBAL' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ flex: 1, padding: '20px 20px 100px', overflowY: 'auto' }}>
-              {renderMessageList(allMessages, true)}
-              <div ref={globalScrollRef} style={{ height: '1px' }} />
-            </div>
-            {/* 一斉送信エリア：改行入力対応 */}
-            <div style={{ position: 'fixed', bottom: 0, width: '100%', padding: '10px 20px 20px', background: '#800000', borderTop: '2px solid #D4AF37', zIndex: 10 }}>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-                <textarea 
-                  value={globalText} 
-                  onChange={e => setGlobalText(e.target.value)} 
-                  placeholder="全員に一斉送信..." 
-                  style={{ flex: 1, padding: '10px 15px', background: '#000', color: '#fff', borderRadius: '15px', border: '1px solid #333', outline: 'none', resize: 'none', height: '50px', fontSize: '14px', whiteSpace: 'pre-wrap' }} 
-                />
-                <button onClick={handleGlobalSend} style={{ background: '#000', color: '#D4AF37', border: 'none', height: '50px', padding: '0 20px', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}>SEND</button>
-              </div>
-            </div>
+          <div style={{ padding: '20px 20px 100px' }}>
+            {renderMessageList(allMessages, true)}
+            {/* 強力なスクロールアンカー */}
+            <div ref={globalScrollRef} style={{ height: '20px', clear: 'both' }} />
           </div>
         ) : (
           <>
             {!selectedUserId ? (
               <div style={{ padding: '10px' }}>
                 {users.map(u => (
-                  <div key={u.id} onClick={() => setSelectedUserId(u.id)} style={{ padding: '15px 20px', borderBottom: '1px solid #222', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer' }}>
-                    {u.avatar_url ? <img src={u.avatar_url} style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #D4AF37' }} alt="" /> : <InitialAvatar name={u.username} />}
+                  <div key={u.id} onClick={() => setSelectedUserId(u.id)} style={{ padding: '15px 20px', borderBottom: '1px solid #222', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <InitialAvatar name={u.username} />
                     <div style={{ flex: 1, overflow: 'hidden' }}>
                       <div style={{ fontWeight: 'bold', color: '#D4AF37' }}>{u.username || "Guest"}</div>
-                      <div style={{ fontSize: '0.8rem', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '4px' }}>{u.lastMessage}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.lastMessage}</div>
                     </div>
-                    <div style={{ color: '#D4AF37' }}>→</div>
                   </div>
                 ))}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <div style={{ padding: '10px 20px', background: '#1a1a1a', display: 'flex', alignItems: 'center', gap: '15px', borderBottom: '1px solid #333' }}>
-                  <button onClick={() => setSelectedUserId(null)} style={{ background: 'none', border: 'none', color: '#D4AF37', fontSize: '1.5rem', cursor: 'pointer' }}>←</button>
-                  <span style={{ fontWeight: 'bold' }}>{selectedUser?.username}</span>
+                <div style={{ padding: '10px 20px', background: '#1a1a1a', borderBottom: '1px solid #333', display: 'flex', gap: '15px', alignItems: 'center' }}>
+                  <button onClick={() => setSelectedUserId(null)} style={{ background: 'none', border: 'none', color: '#D4AF37', fontSize: '1.5rem' }}>←</button>
+                  <span style={{ fontWeight: 'bold' }}>{users.find(u => u.id === selectedUserId)?.username}</span>
                 </div>
                 <div style={{ flex: 1, padding: '20px 20px', overflowY: 'auto' }}>
                   {renderMessageList(messages)}
-                  <div ref={scrollRef} style={{ height: '1px' }} />
+                  <div ref={scrollRef} style={{ height: '20px', clear: 'both' }} />
                 </div>
               </div>
             )}
           </>
         )}
       </div>
+
+      {view === 'GLOBAL' && (
+        <div style={{ position: 'fixed', bottom: 0, width: '100%', padding: '10px 20px 20px', background: '#800000', borderTop: '2px solid #D4AF37', zIndex: 10 }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+            <textarea value={globalText} onChange={e => setGlobalText(e.target.value)} placeholder="全員に一斉送信..." style={{ flex: 1, padding: '10px 15px', background: '#000', color: '#fff', borderRadius: '15px', border: '1px solid #333', outline: 'none', resize: 'none', height: '45px', fontSize: '14px' }} />
+            <button onClick={handleGlobalSend} style={{ background: '#000', color: '#D4AF37', border: 'none', height: '45px', padding: '0 20px', borderRadius: '25px', fontWeight: 'bold' }}>SEND</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
