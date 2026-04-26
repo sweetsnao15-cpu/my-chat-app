@@ -67,21 +67,18 @@ export default function AdminPage() {
 
   const handleSend = async (content, isImage = false) => {
     const text = content.trim();
-    if (!text || !user) return;
+    if (!text || !user || viewMode === 'DIRECT') return; // ダイレクト時は送信不可
     
-    if (viewMode === 'GLOBAL') {
-      const guestProfiles = guests.filter(g => g.id !== ADMIN_ID);
-      const bulk = guestProfiles.map(g => ({ content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: isImage, is_read: false }));
-      await supabase.from('messages').insert(bulk);
-    } else if (selectedGuestId) {
-      await supabase.from('messages').insert({ content: text, user_id: ADMIN_ID, receiver_id: selectedGuestId, is_image: isImage, is_read: false });
-    }
+    const guestProfiles = guests.filter(g => g.id !== ADMIN_ID);
+    const bulk = guestProfiles.map(g => ({ content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: isImage, is_read: false }));
+    await supabase.from('messages').insert(bulk);
+    
     if (!isImage) setInputText('');
   };
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !user) return;
+    if (!file || !user || viewMode === 'DIRECT') return;
     setIsUploading(true);
     const filePath = `admin/${Date.now()}_${file.name}`;
     const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, file);
@@ -124,27 +121,32 @@ export default function AdminPage() {
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
-                  {!isMe && viewMode === 'GLOBAL' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                      <Avatar profile={senderProfile} size="42px" />
-                      <span style={{ fontSize: '0.65rem', color: '#D4AF37', fontWeight: 'bold' }}>{senderProfile?.username || 'Guest'}</span>
+                  {!isMe && viewMode === 'GLOBAL' && <Avatar profile={senderProfile} size="42px" />}
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '75%' }}>
+                    {!isMe && viewMode === 'GLOBAL' && (
+                      <span style={{ fontSize: '0.75rem', color: '#D4AF37', fontWeight: 'bold', marginLeft: '2px' }}>
+                        {senderProfile?.username || 'Guest'}
+                      </span>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                      <div 
+                        onContextMenu={(e) => viewMode === 'GLOBAL' && (e.preventDefault() || setContextMenu({ x: e.clientX, y: e.clientY, msg: m }))}
+                        style={{ 
+                          padding: m.is_image ? '5px' : '12px 16px', 
+                          background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
+                          backdropFilter: 'blur(4px)',
+                          borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
+                          border: isMe ? '1px solid rgba(128, 0, 0, 0.5)' : '1px solid #D4AF37', 
+                          fontSize: '0.95rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', width: 'fit-content'
+                        }}
+                      >
+                        {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" /> : m.content}
+                      </div>
+                      <div style={{ fontSize: '0.55rem', color: '#666', marginBottom: '2px' }}>
+                        {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </div>
-                  )}
-                  <div 
-                    onContextMenu={(e) => viewMode === 'GLOBAL' && (e.preventDefault() || setContextMenu({ x: e.clientX, y: e.clientY, msg: m }))}
-                    style={{ 
-                      padding: m.is_image ? '5px' : '12px 16px', 
-                      background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
-                      backdropFilter: 'blur(4px)',
-                      borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                      border: isMe ? '1px solid rgba(128, 0, 0, 0.5)' : '1px solid #D4AF37', 
-                      maxWidth: '75%', fontSize: '0.95rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
-                    }}
-                  >
-                    {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" /> : m.content}
-                  </div>
-                  <div style={{ fontSize: '0.55rem', color: '#666', marginTop: 'auto', marginBottom: '2px' }}>
-                    {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               </div>
@@ -188,29 +190,31 @@ export default function AdminPage() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#050505' }}>
           <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 15px' }}>{renderMessages()}</div>
           
-          <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0 }}>
-            <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-              <button onClick={() => fileInputRef.current?.click()} style={{ background: 'transparent', border: 'none', color: '#D4AF37', fontSize: '1.5rem', padding: '5px', cursor: 'pointer' }}>{isUploading ? '...' : '⊕'}</button>
-              <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
-              
-              <textarea 
-                value={inputText} 
-                onChange={e => setInputText(e.target.value)} 
-                placeholder={viewMode === 'GLOBAL' ? "全員へ送信..." : "ダイレクト送信..."} 
-                rows={1}
-                onInput={(e) => {
-                  e.target.style.height = 'auto';
-                  e.target.style.height = e.target.scrollHeight + 'px';
-                }}
-                style={{ 
-                  flex: 1, background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', 
-                  borderRadius: '18px', padding: '8px 15px', resize: 'none', fontSize: '15px', outline: 'none', 
-                  fontFamily: 'serif', lineHeight: '1.4', maxHeight: '120px'
-                }} 
-              />
-              <button onClick={() => handleSend(inputText)} style={{ background: '#000', color: '#D4AF37', padding: '8px 18px', borderRadius: '18px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '13px', fontFamily: 'serif', cursor: 'pointer' }}>SEND</button>
+          {viewMode === 'GLOBAL' && (
+            <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0 }}>
+              <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                <button onClick={() => fileInputRef.current?.click()} style={{ background: 'transparent', border: 'none', color: '#D4AF37', fontSize: '1.5rem', padding: '5px', cursor: 'pointer' }}>{isUploading ? '...' : '⊕'}</button>
+                <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
+                
+                <textarea 
+                  value={inputText} 
+                  onChange={e => setInputText(e.target.value)} 
+                  placeholder="全員へ送信..." 
+                  rows={1}
+                  onInput={(e) => {
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
+                  style={{ 
+                    flex: 1, background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', 
+                    borderRadius: '18px', padding: '8px 15px', resize: 'none', fontSize: '15px', outline: 'none', 
+                    fontFamily: 'serif', lineHeight: '1.4', maxHeight: '120px'
+                  }} 
+                />
+                <button onClick={() => handleSend(inputText)} style={{ background: '#000', color: '#D4AF37', padding: '8px 18px', borderRadius: '18px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '13px', fontFamily: 'serif', cursor: 'pointer' }}>SEND</button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
