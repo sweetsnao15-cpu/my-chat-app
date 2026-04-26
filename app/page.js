@@ -34,7 +34,6 @@ export default function ChatPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // 長押しメニュー用
   const [contextMenu, setContextMenu] = useState(null);
   const longPressTimer = useRef(null);
   
@@ -85,7 +84,7 @@ export default function ChatPage() {
     if ((!inputText.trim() && !imgUrl) || !user) return;
     const contentBody = imgUrl || inputText;
     setInputText('');
-    await supabase.from('messages').insert([{ content: contentBody, user_id: user.id, is_image: !!imgUrl, receiver_id: ADMIN_ID }]);
+    await supabase.from('messages').insert([{ content: contentBody, user_id: user.id, is_image: !!imgUrl, receiver_id: ADMIN_ID, is_read: false }]);
   };
 
   const handleFileUpload = async (e) => {
@@ -97,32 +96,14 @@ export default function ChatPage() {
     handleSend(publicUrl);
   };
 
-  // --- 長押しメニュー関連 ---
   const handleTouchStart = (e, m) => {
     longPressTimer.current = setTimeout(() => {
       const touch = e.touches[0];
       setContextMenu({ x: touch.clientX, y: touch.clientY, message: m });
-    }, 600); // 0.6秒長押しでメニュー表示
+    }, 600);
   };
 
-  const handleTouchEnd = () => {
-    clearTimeout(longPressTimer.current);
-  };
-
-  const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    setContextMenu(null);
-  };
-
-  const undoSend = async (id) => {
-    await supabase.from('messages').delete().eq('id', id);
-    setContextMenu(null);
-  };
-
-  const deleteLocally = (id) => {
-    setMessages(messages.filter(m => m.id !== id));
-    setContextMenu(null);
-  };
+  const handleTouchEnd = () => clearTimeout(longPressTimer.current);
 
   if (loading) return <div style={{ background: '#000', height: '100dvh' }} />;
 
@@ -143,38 +124,15 @@ export default function ChatPage() {
   return (
     <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', position: 'relative' }}>
       
-      {/* 長押しメニュー本体 */}
       {contextMenu && (
         <div style={{
           position: 'fixed', top: contextMenu.y - 80, left: Math.min(contextMenu.x, window.innerWidth - 160),
-          background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, overflow: 'hidden',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.5)', width: '150px'
+          background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, width: '150px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
         }}>
-          <div onClick={() => copyToClipboard(contextMenu.message.content)} style={{ padding: '12px 15px', borderBottom: '1px solid #333', fontSize: '0.9rem', cursor: 'pointer' }}>コピー</div>
-          <div onClick={() => deleteLocally(contextMenu.message.id)} style={{ padding: '12px 15px', borderBottom: '1px solid #333', fontSize: '0.9rem', cursor: 'pointer' }}>削除 (自分のみ)</div>
+          <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '12px 15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>コピー</div>
           {contextMenu.message.user_id === user.id && (
-            <div onClick={() => undoSend(contextMenu.message.id)} style={{ padding: '12px 15px', color: '#ff4d4d', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 'bold' }}>送信を取り消す</div>
+            <div onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.message.id); setContextMenu(null); }} style={{ padding: '12px 15px', color: '#ff4d4d', fontSize: '0.9rem', fontWeight: 'bold' }}>送信を取り消す</div>
           )}
-        </div>
-      )}
-
-      {isModalOpen && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ width: '100%', maxWidth: '320px', background: '#1a1a1a', padding: '30px', borderRadius: '25px', border: '2px solid #800000', textAlign: 'center' }}>
-            <label style={{ display: 'block', margin: '0 auto 20px', width: '100px', height: '100px', borderRadius: '50%', border: '2px solid #D4AF37', overflow: 'hidden' }}>
-              {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <InitialAvatar name={profile.username} size="100px" fontSize="3rem" />}
-              <input type="file" accept="image/*" onChange={async (e)=>{
-                const f=e.target.files[0]; if(!f)return;
-                const p=`avatars/${user.id}`;
-                await supabase.storage.from('chat-images').upload(p,f,{upsert:true});
-                const {data:{publicUrl:u}}=supabase.storage.from('chat-images').getPublicUrl(p);
-                setProfile({...profile, avatar_url:u});
-              }} style={{ display: 'none' }} />
-            </label>
-            <input value={profile.username} onChange={e => setProfile({ ...profile, username: e.target.value })} style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px', textAlign: 'center' }} />
-            <button onClick={async() => { await supabase.from('profiles').upsert({ id: user.id, username: profile.username, avatar_url: profile.avatar_url }); setIsModalOpen(false); }} style={{ width: '100%', padding: '12px', background: '#800000', color: '#fff', border: 'none', fontWeight: 'bold' }}>SAVE</button>
-            <button onClick={() => setIsModalOpen(false)} style={{ marginTop: '10px', background: 'none', border: 'none', color: '#D4AF37' }}>CLOSE</button>
-          </div>
         </div>
       )}
 
@@ -192,11 +150,10 @@ export default function ChatPage() {
           const showDate = i === 0 || mDate !== new Date(messages[i-1].created_at).toLocaleDateString();
           return (
             <div key={m.id}>
-              {showDate && <div style={{ textAlign: 'center', margin: '30px 0', fontSize: '0.85rem', color: '#999', fontFamily: 'serif', letterSpacing: '1px' }}>― {mDate} ―</div>}
+              {showDate && <div style={{ textAlign: 'center', margin: '30px 0', fontSize: '0.85rem', color: '#999', fontFamily: 'serif' }}>― {mDate} ―</div>}
               <div 
                 onTouchStart={(e) => handleTouchStart(e, m)}
                 onTouchEnd={handleTouchEnd}
-                onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, message: m }); }}
                 style={{ marginBottom: '22px', textAlign: isMe ? 'right' : 'left' }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
@@ -207,13 +164,17 @@ export default function ChatPage() {
                     maxWidth: '85%', color: '#fff', 
                     border: isMe ? 'none' : '2px solid #D4AF37',
                     boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-                    wordBreak: 'break-all',
-                    whiteSpace: 'pre-wrap', // 改行を反映
-                    textAlign: 'left'
+                    wordBreak: 'break-word',
+                    whiteSpace: 'pre-wrap', // 改行対応
+                    textAlign: 'left',
+                    display: 'inline-block' // スマホ用
                   }}>
                     {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} alt="" /> : m.content}
                   </div>
-                  <span style={{ fontSize: '0.6rem', color: '#666', marginTop: '5px' }}>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                  <div style={{ display: 'flex', gap: '5px', alignItems: 'center', marginTop: '5px' }}>
+                    {isMe && m.is_read && <span style={{ fontSize: '0.65rem', color: '#D4AF37', fontWeight: 'bold' }}>既読</span>}
+                    <span style={{ fontSize: '0.6rem', color: '#666' }}>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -223,11 +184,11 @@ export default function ChatPage() {
       </div>
 
       <div style={{ padding: '15px 20px', background: '#800000', display: 'flex', gap: '12px', alignItems: 'flex-end', borderTop: '2px solid #D4AF37', paddingBottom: 'calc(15px + env(safe-area-inset-bottom))' }}>
-        <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <CameraIcon /><input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
         </label>
         <textarea ref={textareaRef} value={inputText} onChange={e => setInputText(e.target.value)} placeholder="Message..." style={{ flex: 1, padding: '10px 20px', borderRadius: '22px', border: '1px solid rgba(255,255,255,0.3)', outline: 'none', resize: 'none', height: '42px', background: '#800000', color: '#fff', fontSize: '16px' }} />
-        <button onClick={() => handleSend()} style={{ background: '#000', color: '#D4AF37', width: '75px', height: '42px', borderRadius: '22px', border: 'none', fontSize: '16px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic' }}>SEND</button>
+        <button onClick={() => handleSend()} style={{ background: '#000', color: '#D4AF37', width: '75px', height: '42px', borderRadius: '22px', fontWeight: 'bold', fontFamily: 'serif' }}>SEND</button>
       </div>
     </div>
   );
