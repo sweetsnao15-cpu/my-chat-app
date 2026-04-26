@@ -37,6 +37,15 @@ export default function ChatPage() {
   const [contextMenu, setContextMenu] = useState(null);
   
   const textareaRef = useRef(null);
+  const scrollContainerRef = useRef(null); // スクロール制御用
+
+  // スクロールを一番下（最新）に移動させる関数
+  const scrollToBottom = () => {
+    if (scrollContainerRef.current) {
+      // column-reverseの場合はscrollTop = 0が一番下になります
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  };
 
   const loadProfile = useCallback(async (id) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
@@ -68,19 +77,22 @@ export default function ChatPage() {
   useEffect(() => {
     if (!user) return;
     fetchMessages(user.id);
-    // Realtime購読により、ホスト側の既読(update)を検知
     const channel = supabase.channel(`room_${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages(user.id))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        fetchMessages(user.id);
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, fetchMessages]);
 
+  // メッセージ送信処理
   const handleSend = async (imgUrl = null) => {
     const text = inputText.trim();
     if (!text && !imgUrl) return;
     if (!user) return;
     setInputText('');
     if (textareaRef.current) textareaRef.current.style.height = "42px";
+    
     await supabase.from('messages').insert([{ 
       content: imgUrl || text, 
       user_id: user.id, 
@@ -88,6 +100,9 @@ export default function ChatPage() {
       is_image: !!imgUrl,
       is_read: false 
     }]);
+
+    // 送信後、少し遅らせてスクロール（描画完了を待つため）
+    setTimeout(scrollToBottom, 100);
   };
 
   const handleFileUpload = async (e) => {
@@ -187,7 +202,11 @@ export default function ChatPage() {
         </div>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column-reverse' }}>
+      {/* スクロールコンテナに ref を追加 */}
+      <div 
+        ref={scrollContainerRef}
+        style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column-reverse' }}
+      >
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {messages.slice().reverse().map((m, i, arr) => {
             const isMe = m.user_id === user.id;
@@ -217,10 +236,15 @@ export default function ChatPage() {
                       border: isMe ? 'none' : '2px solid #D4AF37', 
                       whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'left'
                     }}>
-                      {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} /> : m.content}
+                      {m.is_image ? (
+                        <img 
+                          src={m.content} 
+                          onLoad={scrollToBottom} // 画像が読み込まれたら再度スクロール
+                          style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} 
+                        />
+                      ) : m.content}
                     </div>
                     <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      {/* 【修正】自分が送ったメッセージが既読なら表示 */}
                       {isMe && m.is_read && <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>既読</span>}
                       {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                     </div>
