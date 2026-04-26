@@ -166,7 +166,7 @@ export default function ChatPage() {
           const showDate = i === 0 || mDate !== new Date(messages[i-1].created_at).toLocaleDateString();
           return (
             <div key={m.id}>
-              {showDate && <div style={{ textAlign: 'center', margin: '30px 0', fontSize: '0.8rem', color: '#666', fontFamily: 'serif' }}>― {mDate} ―</div>}
+              {showDate && <div style={{ textAlign: 'center', margin: '30px 0', fontSize: '0.85rem', color: '#999', fontFamily: 'serif', letterSpacing: '1px' }}>― {mDate} ―</div>}
               <div onContextMenu={(e) => handleContextMenu(e, m)} style={{ marginBottom: '22px', textAlign: isMe ? 'right' : 'left' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                   <div style={{ 
@@ -175,7 +175,8 @@ export default function ChatPage() {
                     borderRadius: isMe ? '20px 20px 0 20px' : '20px 20px 20px 0', 
                     maxWidth: '85%', color: '#fff', 
                     border: isMe ? 'none' : '2px solid #D4AF37',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+                    wordBreak: 'break-all'
                   }}>
                     {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} /> : m.content}
                   </div>
