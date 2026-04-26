@@ -73,6 +73,7 @@ export default function AdminPage() {
   };
 
   const handleContextMenu = (e, msg) => {
+    if (viewMode === 'DIRECT') return; // ダイレクト時は長押し無効
     e.preventDefault();
     const x = e.clientX || (e.touches && e.touches[0].clientX);
     const y = e.clientY || (e.touches && e.touches[0].clientY);
@@ -102,7 +103,7 @@ export default function AdminPage() {
 
     let lastDate = "";
     return (
-      <div style={{ maxWidth: '600px', margin: '0 auto', width: '100%' }}>
+      <div style={{ maxWidth: '600px', margin: '0 auto', width: '100%', userSelect: 'none' }}>
         {filtered.map(m => {
           const currentDate = new Date(m.created_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
           const showDate = currentDate !== lastDate;
@@ -118,15 +119,16 @@ export default function AdminPage() {
               <div 
                 onContextMenu={(e) => handleContextMenu(e, m)}
                 onTouchStart={(e) => {
+                  if (viewMode === 'DIRECT') return;
                   const timer = setTimeout(() => handleContextMenu(e, m), 500);
                   e.target.ontouchend = () => clearTimeout(timer);
                 }}
                 style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}
               >
                 {!isMe && viewMode === 'GLOBAL' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', marginLeft: '5px' }}>
-                    <Avatar profile={senderProfile} size="24px" />
-                    <span style={{ fontSize: '0.65rem', color: '#D4AF37' }}>{senderProfile?.username || 'Guest'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', marginLeft: '5px' }}>
+                    <Avatar profile={senderProfile} size="36px" />
+                    <span style={{ fontSize: '0.75rem', color: '#D4AF37', fontWeight: 'bold' }}>{senderProfile?.username || 'Guest'}</span>
                   </div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
@@ -134,7 +136,8 @@ export default function AdminPage() {
                     padding: m.is_image ? '5px' : '12px 16px', 
                     background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
                     backdropFilter: 'blur(4px)',
-                    borderRadius: isMe ? '2px 18px 18px 18px' : '18px 2px 18px 18px', 
+                    // とんがり位置を左右反対に調整
+                    borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
                     border: isMe ? '1px solid rgba(128, 0, 0, 0.5)' : '1px solid #D4AF37', 
                     maxWidth: '100%', fontSize: '0.9rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
                   }}>
@@ -153,18 +156,18 @@ export default function AdminPage() {
   };
 
   return (
-    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif' }}>
+    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none' }}>
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 60, left: contextMenu.x - 40, background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '10px', zIndex: 9999 }}>
-          <div onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }} style={{ padding: '10px 20px', fontSize: '0.8rem', borderBottom: '1px solid #333' }}>コピー</div>
-          {contextMenu.msg.user_id === ADMIN_ID && <div onClick={deleteMessage} style={{ padding: '10px 20px', fontSize: '0.8rem', color: '#ff4d4d' }}>送信取消</div>}
+          <div onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }} style={{ padding: '10px 20px', fontSize: '0.8rem', borderBottom: '1px solid #333', cursor: 'pointer' }}>コピー</div>
+          {contextMenu.msg.user_id === ADMIN_ID && <div onClick={deleteMessage} style={{ padding: '10px 20px', fontSize: '0.8rem', color: '#ff4d4d', cursor: 'pointer' }}>送信取消</div>}
         </div>
       )}
       <header style={{ padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
         <h1 style={{ fontSize: '1.4rem', fontStyle: 'italic', margin: 0, letterSpacing: '2px' }}>for VAU - HOST</h1>
         <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px' }}>
           {['GLOBAL', 'DIRECT'].map(mode => (
-            <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '4px 20px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', fontFamily: 'serif' }}>{mode}</button>
+            <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '4px 20px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', fontFamily: 'serif', cursor: 'pointer' }}>{mode}</button>
           ))}
         </div>
       </header>
@@ -185,7 +188,7 @@ export default function AdminPage() {
             <div style={{ padding: '15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0 }}>
               <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
                 <textarea value={inputText} onChange={e => setInputText(e.target.value)} placeholder="全員へのメッセージを入力..." style={{ flex: 1, background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '15px', padding: '10px 15px', resize: 'none', minHeight: '40px', maxHeight: '100px', fontSize: '15px', outline: 'none', fontFamily: 'serif' }} />
-                <button onClick={handleSendGlobal} style={{ background: '#000', color: '#D4AF37', padding: '10px 20px', borderRadius: '15px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '14px', fontFamily: 'serif' }}>SEND</button>
+                <button onClick={handleSendGlobal} style={{ background: '#000', color: '#D4AF37', padding: '10px 20px', borderRadius: '15px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '14px', fontFamily: 'serif', cursor: 'pointer' }}>SEND</button>
               </div>
             </div>
           )}
