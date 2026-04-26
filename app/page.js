@@ -33,8 +33,8 @@ export default function ChatPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  
   const [contextMenu, setContextMenu] = useState(null);
+  
   const longPressTimer = useRef(null);
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
@@ -47,9 +47,7 @@ export default function ChatPage() {
   const fetchMessages = useCallback(async (uid) => {
     if (!uid) return;
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
-    if (data) {
-      setMessages(data.filter(m => m.user_id === uid || (m.user_id === ADMIN_ID && m.receiver_id === uid)));
-    }
+    if (data) setMessages(data.filter(m => m.user_id === uid || m.receiver_id === uid));
   }, []);
 
   useEffect(() => {
@@ -73,23 +71,14 @@ export default function ChatPage() {
     return () => { supabase.removeChannel(channel); };
   }, [user, fetchMessages]);
 
-  useEffect(() => { 
-    scrollRef.current?.scrollIntoView({ behavior: "smooth" }); 
-  }, [messages]);
+  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   const handleSend = async (imgUrl = null) => {
     const text = inputText.trim();
     if (!text && !imgUrl) return;
     if (!user) return;
     if (!imgUrl) setInputText('');
-
-    await supabase.from('messages').insert([{ 
-      content: imgUrl || text, 
-      user_id: user.id, 
-      receiver_id: ADMIN_ID, 
-      is_image: !!imgUrl, 
-      is_read: false 
-    }]);
+    await supabase.from('messages').insert([{ content: imgUrl || text, user_id: user.id, receiver_id: ADMIN_ID, is_image: !!imgUrl }]);
   };
 
   const handleFileUpload = async (e) => {
@@ -101,7 +90,6 @@ export default function ChatPage() {
     handleSend(publicUrl);
   };
 
-  // --- 長押しメニュー制御 ---
   const handleTouchStart = (e, m) => {
     longPressTimer.current = setTimeout(() => {
       const touch = e.touches ? e.touches[0] : e;
@@ -110,15 +98,8 @@ export default function ChatPage() {
   };
   const handleTouchEnd = () => clearTimeout(longPressTimer.current);
 
-  const deleteMessageLocally = (id) => {
-    setMessages(prev => prev.filter(m => m.id !== id));
-    setContextMenu(null);
-  };
-
-  const undoMessage = async (id) => {
-    await supabase.from('messages').delete().eq('id', id);
-    setContextMenu(null);
-  };
+  const deleteLocally = (id) => { setMessages(prev => prev.filter(m => m.id !== id)); setContextMenu(null); };
+  const undoMessage = async (id) => { await supabase.from('messages').delete().eq('id', id); setContextMenu(null); };
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -145,12 +126,19 @@ export default function ChatPage() {
   );
 
   return (
-    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', position: 'relative' }}>
+    <div 
+      onClick={() => setContextMenu(null)} 
+      style={{ 
+        width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
+        background: '#000', color: '#fff', position: 'relative',
+        userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' // 【追加】全体での選択・プレビュー無効化
+      }}
+    >
       
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 120, left: Math.min(contextMenu.x, window.innerWidth - 180), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '15px', zInterx: 1000, width: '160px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+        <div style={{ position: 'fixed', top: contextMenu.y - 120, left: Math.min(contextMenu.x, window.innerWidth - 180), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '15px', zIndex: 1000, width: '160px', overflow: 'hidden' }}>
           <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>コピー</div>
-          <div onClick={() => deleteMessageLocally(contextMenu.message.id)} style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>削除</div>
+          <div onClick={() => deleteLocally(contextMenu.message.id)} style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>削除</div>
           {contextMenu.message.user_id === user.id && (
             <div onClick={() => undoMessage(contextMenu.message.id)} style={{ padding: '15px', color: '#ff4d4d', fontSize: '0.9rem' }}>送信を取り消す</div>
           )}
@@ -170,7 +158,11 @@ export default function ChatPage() {
                 setProfile({...profile, avatar_url:u});
               }} style={{ display: 'none' }} />
             </label>
-            <input value={profile.username} onChange={e => setProfile({...profile, username: e.target.value})} style={{ width: '100%', padding: '10px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px', borderRadius: '8px' }} />
+            <input 
+              value={profile.username} 
+              onChange={e => setProfile({...profile, username: e.target.value})} 
+              style={{ width: '100%', padding: '10px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px', borderRadius: '8px', userSelect: 'text', WebkitUserSelect: 'text' }} // 【修正】入力欄は選択可能に
+            />
             <button onClick={async() => { await supabase.from('profiles').upsert({ id: user.id, username: profile.username, avatar_url: profile.avatar_url }); setIsModalOpen(false); }} style={{ width: '100%', padding: '10px', background: '#800000', color: '#fff', border: 'none', marginBottom: '10px', borderRadius: '8px' }}>SAVE</button>
             <button onClick={async () => { await supabase.auth.signOut(); setIsModalOpen(false); }} style={{ width: '100%', padding: '10px', background: '#333', color: '#fff', border: 'none', borderRadius: '8px' }}>LOG OUT</button>
           </div>
@@ -196,10 +188,9 @@ export default function ChatPage() {
                   maxWidth: '85%', color: '#fff', border: isMe ? 'none' : '2px solid #D4AF37',
                   whiteSpace: 'pre-wrap', width: 'fit-content', textAlign: 'left'
                 }}>
-                  {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px' }} /> : m.content}
+                  {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', pointerEvents: 'none' }} /> : m.content}
                 </div>
                 <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '5px' }}>
-                  {isMe && m.is_read && <span style={{ color: '#D4AF37', marginRight: '5px' }}>既読</span>}
                   {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                 </div>
               </div>
@@ -218,7 +209,11 @@ export default function ChatPage() {
           value={inputText} 
           onChange={e => setInputText(e.target.value)} 
           placeholder="Message..." 
-          style={{ flex: 1, padding: '10px 15px', borderRadius: '22px', border: '1px solid rgba(255,255,255,0.3)', background: '#800000', color: '#fff', fontSize: '16px', outline: 'none', resize: 'none', height: '42px' }} 
+          style={{ 
+            flex: 1, padding: '10px 15px', borderRadius: '22px', border: '1px solid rgba(255,255,255,0.3)', 
+            background: '#800000', color: '#fff', fontSize: '16px', outline: 'none', resize: 'none', height: '42px',
+            userSelect: 'text', WebkitUserSelect: 'text' // 【修正】入力欄は選択可能に
+          }} 
         />
         <button 
           onClick={() => handleSend()} 
