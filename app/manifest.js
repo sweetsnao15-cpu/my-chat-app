@@ -10,7 +10,7 @@ export default function manifest() {
     theme_color: '#800000',        // テーマカラー
     icons: [
       {
-        src: '/Gemini_Generated_Image_dkgzo1dkgzo1dkgz.png',      // publicフォルダに配置した画像
+        src: '/icon-192.png',      // publicフォルダに配置した画像
         sizes: '192x192',
         type: 'image/png',
       },
