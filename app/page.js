@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
-// ... (省略: CameraIcon, InitialAvatar, ADMIN_ID) ...
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
 const CameraIcon = () => (
@@ -34,17 +33,19 @@ export default function ChatPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  // 長押しメニュー用
   const [contextMenu, setContextMenu] = useState(null);
   const longPressTimer = useRef(null);
+  
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // ... (省略: useEffects, loadProfile, fetchMessages, authListeners) ...
+  // 入力欄の自動高さ調整
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "42px";
-      const scrollHeight = textareaRef.current.scrollHeight;
-      textareaRef.current.style.height = Math.min(scrollHeight, 150) + "px";
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 150) + "px";
     }
   }, [inputText]);
 
@@ -96,17 +97,30 @@ export default function ChatPage() {
     handleSend(publicUrl);
   };
 
+  // --- 長押しメニュー関連 ---
   const handleTouchStart = (e, m) => {
     longPressTimer.current = setTimeout(() => {
       const touch = e.touches[0];
       setContextMenu({ x: touch.clientX, y: touch.clientY, message: m });
+      if (navigator.vibrate) navigator.vibrate(50);
     }, 600);
   };
 
   const handleTouchEnd = () => clearTimeout(longPressTimer.current);
 
+  const deleteMessageLocal = (id) => {
+    setMessages(prev => prev.filter(m => m.id !== id));
+    setContextMenu(null);
+  };
+
+  const undoSendMessage = async (id) => {
+    await supabase.from('messages').delete().eq('id', id);
+    setContextMenu(null);
+  };
+
   if (loading) return <div style={{ background: '#000', height: '100dvh' }} />;
 
+  // ログイン画面
   if (!user) return (
     <div style={{ minHeight: '100dvh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
       <div style={{ width: '100%', maxWidth: '400px', padding: '40px 30px', background: '#0a0a0a', color: '#fff', borderRadius: '30px', border: '2px solid #800000', textAlign: 'center' }}>
@@ -116,7 +130,8 @@ export default function ChatPage() {
         <button onClick={async () => {
           const { error } = isSignUp ? await supabase.auth.signUp({ email, password }) : await supabase.auth.signInWithPassword({ email, password });
           if (error) alert(error.message);
-        }} style={{ width: '100%', padding: '15px', background: '#800000', color: '#fff', fontWeight: 'bold', border: 'none', borderRadius: '10px' }}>{isSignUp ? "CREATE" : "LOG IN"}</button>
+        }} style={{ width: '100%', padding: '15px', background: '#800000', color: '#fff', fontWeight: 'bold', border: 'none', borderRadius: '10px', marginBottom: '15px' }}>{isSignUp ? "CREATE" : "LOG IN"}</button>
+        <div onClick={() => setIsSignUp(!isSignUp)} style={{ color: '#D4AF37', fontSize: '0.8rem', cursor: 'pointer' }}>{isSignUp ? "Already have an account? Log In" : "Need an account? Sign Up"}</div>
       </div>
     </div>
   );
@@ -124,18 +139,21 @@ export default function ChatPage() {
   return (
     <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', position: 'relative' }}>
       
+      {/* 長押しコンテキストメニュー */}
       {contextMenu && (
         <div style={{
-          position: 'fixed', top: contextMenu.y - 80, left: Math.min(contextMenu.x, window.innerWidth - 160),
-          background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, width: '150px', boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+          position: 'fixed', top: Math.min(contextMenu.y - 100, window.innerHeight - 150), left: Math.min(contextMenu.x, window.innerWidth - 180),
+          background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, width: '170px', boxShadow: '0 10px 30px rgba(0,0,0,0.8)'
         }}>
           <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '12px 15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>コピー</div>
+          <div onClick={() => deleteMessageLocal(contextMenu.message.id)} style={{ padding: '12px 15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>削除（自分のみ）</div>
           {contextMenu.message.user_id === user.id && (
-            <div onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.message.id); setContextMenu(null); }} style={{ padding: '12px 15px', color: '#ff4d4d', fontSize: '0.9rem', fontWeight: 'bold' }}>送信を取り消す</div>
+            <div onClick={() => undoSendMessage(contextMenu.message.id)} style={{ padding: '12px 15px', color: '#ff4d4d', fontSize: '0.9rem', fontWeight: 'bold' }}>送信を取り消す</div>
           )}
         </div>
       )}
 
+      {/* 設定モーダル */}
       {isModalOpen && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ width: '100%', maxWidth: '320px', background: '#1a1a1a', padding: '30px', borderRadius: '25px', border: '2px solid #800000', textAlign: 'center' }}>
@@ -149,9 +167,10 @@ export default function ChatPage() {
                 setProfile({...profile, avatar_url:u});
               }} style={{ display: 'none' }} />
             </label>
-            <input value={profile.username} onChange={e => setProfile({ ...profile, username: e.target.value })} style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px', textAlign: 'center' }} />
-            <button onClick={async() => { await supabase.from('profiles').upsert({ id: user.id, username: profile.username, avatar_url: profile.avatar_url }); setIsModalOpen(false); }} style={{ width: '100%', padding: '12px', background: '#800000', color: '#fff', border: 'none', fontWeight: 'bold' }}>SAVE</button>
-            <button onClick={() => setIsModalOpen(false)} style={{ marginTop: '10px', background: 'none', border: 'none', color: '#D4AF37' }}>CLOSE</button>
+            <input value={profile.username} onChange={e => setProfile({ ...profile, username: e.target.value })} style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px', textAlign: 'center', borderRadius: '10px' }} placeholder="Username" />
+            <button onClick={async() => { await supabase.from('profiles').upsert({ id: user.id, username: profile.username, avatar_url: profile.avatar_url }); setIsModalOpen(false); }} style={{ width: '100%', padding: '12px', background: '#800000', color: '#fff', border: 'none', fontWeight: 'bold', borderRadius: '10px', marginBottom: '10px' }}>SAVE</button>
+            <button onClick={async () => { await supabase.auth.signOut(); setIsModalOpen(false); }} style={{ width: '100%', padding: '12px', background: '#333', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', marginBottom: '10px' }}>LOG OUT</button>
+            <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', color: '#D4AF37' }}>CLOSE</button>
           </div>
         </div>
       )}
@@ -174,23 +193,21 @@ export default function ChatPage() {
               <div 
                 onTouchStart={(e) => handleTouchStart(e, m)}
                 onTouchEnd={handleTouchEnd}
+                onContextMenu={(e) => { e.preventDefault(); }} // PC用
                 style={{ marginBottom: '22px', textAlign: isMe ? 'right' : 'left' }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                  {/* 改行対応強化ポイント: white-space と display を調整 */}
                   <div style={{ 
                     padding: m.is_image ? '5px' : '12px 18px', 
                     background: 'rgba(128, 0, 0, 0.85)', 
                     borderRadius: isMe ? '20px 20px 0 20px' : '20px 20px 20px 0', 
-                    maxWidth: '85%', 
-                    color: '#fff', 
+                    maxWidth: '85%', color: '#fff', 
                     border: isMe ? 'none' : '2px solid #D4AF37',
                     boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
                     wordBreak: 'break-word',
-                    overflowWrap: 'anywhere',
                     whiteSpace: 'pre-wrap', 
                     textAlign: 'left',
-                    display: 'block', // inline-block から変更して確実に幅を制御
+                    display: 'block',
                     width: 'fit-content'
                   }}>
                     {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} alt="" /> : m.content}
@@ -207,7 +224,6 @@ export default function ChatPage() {
         <div ref={scrollRef} />
       </div>
 
-      {/* 送信エリア */}
       <div style={{ padding: '15px 20px', background: '#800000', display: 'flex', gap: '12px', alignItems: 'flex-end', borderTop: '2px solid #D4AF37', paddingBottom: 'calc(15px + env(safe-area-inset-bottom))' }}>
         <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <CameraIcon /><input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
