@@ -2,8 +2,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
+// 管理者ID（固定）
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
+// カメラアイコン
 const CameraIcon = () => (
   <svg width="22" height="20" viewBox="0 0 24 22" fill="none" stroke="#D4AF37" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
@@ -11,6 +13,7 @@ const CameraIcon = () => (
   </svg>
 );
 
+// アバター（初期アイコン）
 const InitialAvatar = ({ name, size = '48px', fontSize = '1.4rem' }) => {
   const initial = name && name.trim() ? Array.from(name.trim())[0].toUpperCase() : "V";
   return (
@@ -39,17 +42,22 @@ export default function ChatPage() {
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
 
+  // プロフィール取得
   const loadProfile = useCallback(async (id) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
     if (data) setProfile({ username: data.username || '', avatar_url: data.avatar_url || '' });
   }, []);
 
+  // メッセージ取得
   const fetchMessages = useCallback(async (uid) => {
     if (!uid) return;
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
-    if (data) setMessages(data.filter(m => m.user_id === uid || m.receiver_id === uid));
+    if (data) {
+      setMessages(data.filter(m => m.user_id === uid || m.receiver_id === uid));
+    }
   }, []);
 
+  // 認証状態の監視
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) { setUser(session.user); loadProfile(session.user.id); }
@@ -62,6 +70,7 @@ export default function ChatPage() {
     return () => authListener.subscription.unsubscribe();
   }, [loadProfile]);
 
+  // リアルタイム購読
   useEffect(() => {
     if (!user) return;
     fetchMessages(user.id);
@@ -73,54 +82,36 @@ export default function ChatPage() {
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // 【修正】送信ロジックを整理
+  // メッセージ送信
   const handleSend = async (imgUrl = null) => {
     const text = inputText.trim();
     if (!text && !imgUrl) return;
     if (!user) return;
-
     if (!imgUrl) setInputText('');
 
-    const { error } = await supabase.from('messages').insert([{ 
+    await supabase.from('messages').insert([{ 
       content: imgUrl || text, 
       user_id: user.id, 
       receiver_id: ADMIN_ID, 
-      is_image: !!imgUrl 
+      is_image: !!imgUrl,
+      is_read: false 
     }]);
-
-    if (error) console.error("Send error:", error.message);
   };
 
-  // 【復旧】画像アップロード処理
+  // 画像アップロード
   const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file || !user) return;
-
+    const f = e.target.files[0];
+    if (!f || !user) return;
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `${user.id}/${fileName}`;
-
-      // Storageの「chat-images」バケットへアップロード
-      const { error: uploadError } = await supabase.storage
-        .from('chat-images')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
-
-      // 公開URLを取得
-      const { data: { publicUrl } } = supabase.storage
-        .from('chat-images')
-        .getPublicUrl(filePath);
-
-      // メッセージとして送信
+      const path = `${user.id}/${Date.now()}`;
+      const { error: upErr } = await supabase.storage.from('chat-images').upload(path, f);
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path);
       await handleSend(publicUrl);
-    } catch (error) {
-      console.error("Upload error:", error.message);
-      alert("画像の送信に失敗しました");
-    }
+    } catch (err) { alert("画像の送信に失敗しました"); }
   };
 
+  // 長押しメニュー（青い選択防止含む）
   const handleTouchStart = (e, m) => {
     longPressTimer.current = setTimeout(() => {
       const touch = e.touches ? e.touches[0] : e;
@@ -132,6 +123,7 @@ export default function ChatPage() {
   const deleteLocally = (id) => { setMessages(prev => prev.filter(m => m.id !== id)); setContextMenu(null); };
   const undoMessage = async (id) => { await supabase.from('messages').delete().eq('id', id); setContextMenu(null); };
 
+  // 入力欄の高さ自動調整
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "42px";
@@ -165,9 +157,10 @@ export default function ChatPage() {
         userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'
       }}
     >
-      {/* コンテキストメニュー */}
+      
+      {/* 長押しメニュー */}
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 120, left: Math.min(contextMenu.x, window.innerWidth - 180), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '15px', zIndex: 1000, width: '160px', overflow: 'hidden' }}>
+        <div style={{ position: 'fixed', top: contextMenu.y - 120, left: Math.min(contextMenu.x, window.innerWidth - 180), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '15px', zIndex: 1000, width: '160px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
           <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>コピー</div>
           <div onClick={() => deleteLocally(contextMenu.message.id)} style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>削除</div>
           {contextMenu.message.user_id === user.id && (
@@ -184,7 +177,7 @@ export default function ChatPage() {
         </div>
       </header>
 
-      {/* メッセージ一覧 */}
+      {/* メッセージ表示エリア */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
         {messages.map((m) => {
           const isMe = m.user_id === user.id;
@@ -197,9 +190,11 @@ export default function ChatPage() {
                   maxWidth: '85%', color: '#fff', border: isMe ? 'none' : '2px solid #D4AF37',
                   whiteSpace: 'pre-wrap', width: 'fit-content', textAlign: 'left'
                 }}>
-                  {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', pointerEvents: 'none', display: 'block' }} /> : m.content}
+                  {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block', pointerEvents: 'none' }} /> : m.content}
                 </div>
-                <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '5px' }}>
+                {/* 既読表示 */}
+                <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {isMe && m.is_read && <span style={{ color: '#D4AF37', fontWeight: 'bold' }}>既読</span>}
                   {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                 </div>
               </div>
@@ -209,11 +204,10 @@ export default function ChatPage() {
         <div ref={scrollRef} />
       </div>
 
-      {/* フッター（入力欄・カメラ・送信ボタン） */}
+      {/* 入力エリア */}
       <div style={{ padding: '15px 20px', background: '#800000', display: 'flex', gap: '10px', alignItems: 'flex-end', borderTop: '2px solid #D4AF37', paddingBottom: 'calc(15px + env(safe-area-inset-bottom))' }}>
         <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <CameraIcon />
-          <input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
+          <CameraIcon /><input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
         </label>
         <textarea 
           ref={textareaRef}
@@ -228,7 +222,10 @@ export default function ChatPage() {
         />
         <button 
           onClick={() => handleSend()} 
-          style={{ background: '#000', color: '#D4AF37', width: '70px', height: '42px', borderRadius: '22px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', fontSize: '1.1rem', cursor: 'pointer', border: 'none' }}
+          style={{ 
+            background: '#000', color: '#D4AF37', width: '70px', height: '42px', borderRadius: '22px', 
+            fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', fontSize: '1.1rem', cursor: 'pointer', border: 'none' 
+          }}
         >SEND</button>
       </div>
     </div>
