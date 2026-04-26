@@ -78,19 +78,18 @@ export default function ChatPage() {
   }, [messages]);
 
   const handleSend = async (imgUrl = null) => {
-    if ((!inputText.trim() && !imgUrl) || !user) return;
-    const contentBody = imgUrl || inputText;
+    const text = inputText.trim();
+    if (!text && !imgUrl) return;
+    if (!user) return;
     if (!imgUrl) setInputText('');
-    
-    const { error } = await supabase.from('messages').insert([{ 
-      content: contentBody, 
+
+    await supabase.from('messages').insert([{ 
+      content: imgUrl || text, 
       user_id: user.id, 
       receiver_id: ADMIN_ID, 
       is_image: !!imgUrl, 
       is_read: false 
     }]);
-    
-    if (error) console.error("Send Error:", error);
   };
 
   const handleFileUpload = async (e) => {
@@ -102,6 +101,7 @@ export default function ChatPage() {
     handleSend(publicUrl);
   };
 
+  // --- 長押しメニュー制御 ---
   const handleTouchStart = (e, m) => {
     longPressTimer.current = setTimeout(() => {
       const touch = e.touches ? e.touches[0] : e;
@@ -109,6 +109,16 @@ export default function ChatPage() {
     }, 600);
   };
   const handleTouchEnd = () => clearTimeout(longPressTimer.current);
+
+  const deleteMessageLocally = (id) => {
+    setMessages(prev => prev.filter(m => m.id !== id));
+    setContextMenu(null);
+  };
+
+  const undoMessage = async (id) => {
+    await supabase.from('messages').delete().eq('id', id);
+    setContextMenu(null);
+  };
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -138,10 +148,11 @@ export default function ChatPage() {
     <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', position: 'relative' }}>
       
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: Math.min(contextMenu.x, window.innerWidth - 160), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, width: '150px' }}>
-          <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '12px', borderBottom: '1px solid #333' }}>コピー</div>
+        <div style={{ position: 'fixed', top: contextMenu.y - 120, left: Math.min(contextMenu.x, window.innerWidth - 180), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '15px', zInterx: 1000, width: '160px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+          <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>コピー</div>
+          <div onClick={() => deleteMessageLocally(contextMenu.message.id)} style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>削除</div>
           {contextMenu.message.user_id === user.id && (
-            <div onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.message.id); setContextMenu(null); }} style={{ padding: '12px', color: '#ff4d4d' }}>送信を取り消す</div>
+            <div onClick={() => undoMessage(contextMenu.message.id)} style={{ padding: '15px', color: '#ff4d4d', fontSize: '0.9rem' }}>送信を取り消す</div>
           )}
         </div>
       )}
@@ -159,9 +170,9 @@ export default function ChatPage() {
                 setProfile({...profile, avatar_url:u});
               }} style={{ display: 'none' }} />
             </label>
-            <input value={profile.username} onChange={e => setProfile({...profile, username: e.target.value})} style={{ width: '100%', padding: '10px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px' }} />
-            <button onClick={async() => { await supabase.from('profiles').upsert({ id: user.id, username: profile.username, avatar_url: profile.avatar_url }); setIsModalOpen(false); }} style={{ width: '100%', padding: '10px', background: '#800000', color: '#fff', border: 'none', marginBottom: '10px' }}>SAVE</button>
-            <button onClick={async () => { await supabase.auth.signOut(); setIsModalOpen(false); }} style={{ width: '100%', padding: '10px', background: '#333', color: '#fff', border: 'none' }}>LOG OUT</button>
+            <input value={profile.username} onChange={e => setProfile({...profile, username: e.target.value})} style={{ width: '100%', padding: '10px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px', borderRadius: '8px' }} />
+            <button onClick={async() => { await supabase.from('profiles').upsert({ id: user.id, username: profile.username, avatar_url: profile.avatar_url }); setIsModalOpen(false); }} style={{ width: '100%', padding: '10px', background: '#800000', color: '#fff', border: 'none', marginBottom: '10px', borderRadius: '8px' }}>SAVE</button>
+            <button onClick={async () => { await supabase.auth.signOut(); setIsModalOpen(false); }} style={{ width: '100%', padding: '10px', background: '#333', color: '#fff', border: 'none', borderRadius: '8px' }}>LOG OUT</button>
           </div>
         </div>
       )}
@@ -202,18 +213,16 @@ export default function ChatPage() {
         <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <CameraIcon /><input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
         </label>
-        {/* 入力欄の縁を背景と同じ #800000 に修正 */}
         <textarea 
           ref={textareaRef}
           value={inputText} 
           onChange={e => setInputText(e.target.value)} 
           placeholder="Message..." 
-          style={{ flex: 1, padding: '10px 15px', borderRadius: '20px', border: '1px solid #800000', background: '#800000', color: '#fff', fontSize: '16px', outline: 'none', resize: 'none', height: '42px' }} 
+          style={{ flex: 1, padding: '10px 15px', borderRadius: '22px', border: '1px solid rgba(255,255,255,0.3)', background: '#800000', color: '#fff', fontSize: '16px', outline: 'none', resize: 'none', height: '42px' }} 
         />
-        {/* SENDボタンの書体を for VAU と統一 */}
         <button 
           onClick={() => handleSend()} 
-          style={{ background: '#000', color: '#D4AF37', width: '70px', height: '42px', borderRadius: '20px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', fontSize: '1.1rem' }}
+          style={{ background: '#000', color: '#D4AF37', width: '70px', height: '42px', borderRadius: '22px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', fontSize: '1.1rem', cursor: 'pointer', border: 'none' }}
         >SEND</button>
       </div>
     </div>
