@@ -4,7 +4,6 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-// アバターと未読バッジ
 const GuestAvatarWithBadge = ({ profile, unreadCount, size = '50px', isSelected }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "G";
   return (
@@ -44,12 +43,14 @@ export default function AdminPage() {
 
   const markAsRead = useCallback(async (guestId) => {
     if (!guestId) return;
+    // 1. DBを更新
     await supabase.from('messages')
       .update({ is_read: true })
       .eq('user_id', guestId)
       .eq('receiver_id', ADMIN_ID)
       .eq('is_read', false);
-    // ローカルステートを即座に更新してバッジを消す
+    
+    // 2. ローカルステートを直接更新（これで開き直しても0になる）
     setMessages(prev => prev.map(m => 
       (m.user_id === guestId && m.receiver_id === ADMIN_ID) ? { ...m, is_read: true } : m
     ));
@@ -59,15 +60,12 @@ export default function AdminPage() {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
     fetchGuests();
     fetchMessages();
-
     const channel = supabase.channel('admin_room')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
       .subscribe();
-    
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
-  // DIRECTモードでゲスト選択中のみ自動既読
   useEffect(() => {
     if (viewMode === 'DIRECT' && selectedGuestId) {
       markAsRead(selectedGuestId);
@@ -82,7 +80,6 @@ export default function AdminPage() {
     });
   }, [guests, messages]);
 
-  // 【回復】常に全ゲストへの一斉送信として機能
   const handleSendGlobal = async () => {
     const text = inputText.trim();
     if (!text || !user) return;
@@ -102,10 +99,7 @@ export default function AdminPage() {
 
   const deleteMessage = async () => {
     if (!contextMenu) return;
-    // 一斉送信メッセージの削除（内容と時間で特定）
-    await supabase.from('messages').delete()
-      .eq('user_id', ADMIN_ID)
-      .eq('content', contextMenu.message.content);
+    await supabase.from('messages').delete().eq('id', contextMenu.message.id);
     setContextMenu(null);
   };
 
@@ -116,7 +110,6 @@ export default function AdminPage() {
         (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId)
       )].reverse();
     }
-    // GLOBAL表示（管理者の送信は1つに集約、ゲストからの受信はすべて表示）
     const displayed = [];
     const seenAdminMsgs = new Set();
     [...messages].reverse().forEach(m => {
@@ -140,9 +133,12 @@ export default function AdminPage() {
       `}</style>
 
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: Math.min(contextMenu.x, 200), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
-          <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '12px 20px', fontSize: '0.9rem', borderBottom: '1px solid #333', cursor: 'pointer' }}>コピー</div>
-          <div onClick={deleteMessage} style={{ padding: '12px 20px', fontSize: '0.9rem', color: '#ff4d4d', cursor: 'pointer' }}>送信取消</div>
+        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 50, background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+          <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '12px 20px', fontSize: '0.9rem', borderBottom: contextMenu.message.user_id === ADMIN_ID ? '1px solid #333' : 'none', cursor: 'pointer' }}>コピー</div>
+          {/* 【ゲスト側と統一】自分のメッセージ(ADMIN_ID)の時だけ送信取消を表示 */}
+          {contextMenu.message.user_id === ADMIN_ID && (
+            <div onClick={deleteMessage} style={{ padding: '12px 20px', fontSize: '0.9rem', color: '#ff4d4d', cursor: 'pointer' }}>送信取消</div>
+          )}
         </div>
       )}
 
@@ -203,7 +199,6 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* 入力欄：常に一斉送信（GLOBAL SEND）として動作 */}
           <div style={{ padding: '15px', background: '#800000', display: 'flex', gap: '10px', borderTop: '2px solid #D4AF37', flexShrink: 0 }}>
             <textarea 
               value={inputText} 
