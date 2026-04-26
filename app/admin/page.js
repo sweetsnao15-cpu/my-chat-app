@@ -4,9 +4,10 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
+// アバターコンポーネント
 const GuestAvatar = ({ profile, size = '30px', fontSize = '0.8rem' }) => {
   if (profile?.avatar_url) {
-    return <img src={profile.avatar_url} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '1px solid #D4AF37' }} alt="" />;
+    return <img src={profile.avatar_url} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '1px solid #D4AF37', pointerEvents: 'none' }} alt="" />;
   }
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "G";
   return (
@@ -26,6 +27,7 @@ export default function AdminPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [user, setUser] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
   const scrollRef = useRef(null);
 
   const fetchGuests = useCallback(async () => {
@@ -55,7 +57,6 @@ export default function AdminPage() {
     if (viewMode === 'DIRECT' && selectedGuestId) markAsRead(selectedGuestId);
   }, [messages, viewMode, selectedGuestId, markAsRead]);
 
-  // 【修正】ゲスト選択時は「ぱっと」表示（behavior: "auto"）
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: viewMode === 'DIRECT' ? "auto" : "smooth" });
   }, [messages, viewMode, selectedGuestId]);
@@ -64,26 +65,28 @@ export default function AdminPage() {
     const text = inputText.trim();
     if (!text || !user) return;
     setInputText('');
-    // 内部的には全員に送るが、表示上はcreated_atがほぼ同じになるため集約される
     const bulkMessages = guests.map(g => ({
       content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: false, is_read: false
     }));
     await supabase.from('messages').insert(bulkMessages);
   };
 
-  // 【ロジック変更】GLOBAL画面で管理者の一斉送信を1つにまとめる
+  const openMenu = (e, m) => {
+    e.preventDefault();
+    const x = e.clientX || (e.touches && e.touches[0].clientX);
+    const y = e.clientY || (e.touches && e.touches[0].clientY);
+    setContextMenu({ x, y, message: m });
+  };
+
   const getDisplayMessages = () => {
     if (viewMode === 'DIRECT') {
       return messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId));
     }
-    
-    // GLOBALモード: 管理者の連続する同時刻送信（一斉送信）をフィルタリング
     const displayed = [];
     const seenTimestamps = new Set();
     messages.forEach(m => {
       if (m.user_id === ADMIN_ID) {
         const ts = new Date(m.created_at).getTime();
-        // 1秒以内に送られた管理者の同じ内容は「1つ」とみなす
         const key = `${m.content}_${Math.floor(ts / 1000)}`;
         if (!seenTimestamps.has(key)) {
           displayed.push(m);
@@ -96,15 +99,34 @@ export default function AdminPage() {
     return displayed;
   };
 
-  const currentDisplayMessages = getDisplayMessages();
-
   return (
-    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff' }}>
-      <header style={{ padding: '20px', background: '#800000', borderBottom: '2px solid #D4AF37', textAlign: 'center' }}>
+    <div 
+      onClick={() => setContextMenu(null)}
+      style={{ 
+        width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
+        background: '#000', color: '#fff', overflow: 'hidden',
+        userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'
+      }}
+    >
+      <style>{`
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #800000; borderRadius: 10px; }
+        ::-webkit-scrollbar-track { background: #000; }
+        img { -webkit-touch-callout: none; pointer-events: none; }
+      `}</style>
+
+      {/* メニュー（削除等） */}
+      {contextMenu && (
+        <div style={{ position: 'fixed', top: contextMenu.y - 40, left: Math.min(contextMenu.x, 200), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '10px', zIndex: 1000, width: '150px' }}>
+          <div onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.message.id); setContextMenu(null); }} style={{ padding: '12px', color: '#ff4d4d', fontSize: '0.9rem', cursor: 'pointer' }}>メッセージを削除</div>
+        </div>
+      )}
+
+      <header style={{ padding: '20px', background: '#800000', borderBottom: '2px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
         <h1 style={{ fontSize: '1.8rem', fontFamily: 'serif', fontStyle: 'italic', margin: 0 }}>for VAU - HOST</h1>
         <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '20px' }}>
-          <button onClick={() => setViewMode('GLOBAL')} style={{ background: viewMode === 'GLOBAL' ? '#D4AF37' : 'transparent', color: viewMode === 'GLOBAL' ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px' }}>GLOBAL</button>
-          <button onClick={() => setViewMode('DIRECT')} style={{ background: viewMode === 'DIRECT' ? '#D4AF37' : 'transparent', color: viewMode === 'DIRECT' ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px' }}>DIRECT</button>
+          <button onClick={() => setViewMode('GLOBAL')} style={{ background: viewMode === 'GLOBAL' ? '#D4AF37' : 'transparent', color: viewMode === 'GLOBAL' ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px', cursor: 'pointer' }}>GLOBAL</button>
+          <button onClick={() => setViewMode('DIRECT')} style={{ background: viewMode === 'DIRECT' ? '#D4AF37' : 'transparent', color: viewMode === 'DIRECT' ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px', cursor: 'pointer' }}>DIRECT</button>
         </div>
       </header>
 
@@ -121,21 +143,20 @@ export default function AdminPage() {
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-            {currentDisplayMessages.map(m => {
+            {getDisplayMessages().map(m => {
               const isMe = m.user_id === ADMIN_ID;
               const guest = guests.find(g => g.id === (isMe ? m.receiver_id : m.user_id));
               return (
-                <div key={m.id} style={{ marginBottom: '20px', textAlign: isMe ? 'right' : 'left' }}>
+                <div key={m.id} onContextMenu={(e) => openMenu(e, m)} style={{ marginBottom: '20px', textAlign: isMe ? 'right' : 'left' }}>
                   <div style={{ display: 'flex', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
                     {!isMe && <GuestAvatar profile={guest} />}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                       {!isMe && viewMode === 'GLOBAL' && <div style={{ fontSize: '0.7rem', color: '#D4AF37', marginBottom: '4px' }}>{guest?.username}</div>}
                       <div style={{ 
                         padding: m.is_image ? '5px' : '10px 15px', background: isMe ? '#500000' : '#1a1a1a', 
-                        borderRadius: isMe ? '15px 15px 0 15px' : '15px 15px 15px 0', border: isMe ? 'none' : '1px solid #D4AF37', maxWidth: '280px'
+                        borderRadius: isMe ? '15px 15px 0 15px' : '15px 15px 15px 0', border: isMe ? 'none' : '1px solid #D4AF37', maxWidth: '300px'
                       }}>
-                        {/* 【修正】GLOBALでも画像を表示 */}
-                        {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
+                        {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" /> : m.content}
                       </div>
                       <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '4px' }}>
                         {isMe && m.is_read && viewMode === 'DIRECT' && <span style={{ color: '#D4AF37', marginRight: '5px' }}>既読</span>}
@@ -149,14 +170,14 @@ export default function AdminPage() {
             <div ref={scrollRef} />
           </div>
 
-          {/* 【修正】GLOBALのみ送信機能を表示、DIRECTは非表示 */}
           {viewMode === 'GLOBAL' && (
-            <div style={{ padding: '15px', background: '#800000', display: 'flex', gap: '10px', borderTop: '2px solid #D4AF37' }}>
+            <div style={{ padding: '15px', background: '#800000', display: 'flex', gap: '10px', borderTop: '2px solid #D4AF37', flexShrink: 0 }}>
               <textarea 
                 value={inputText} 
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendGlobal(); } }}
                 onChange={e => setInputText(e.target.value)} 
                 placeholder="全ゲストへ一斉送信..."
-                style={{ flex: 1, background: '#800000', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px', padding: '10px 15px', outline: 'none', resize: 'none', height: '42px' }}
+                style={{ flex: 1, background: '#800000', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px', padding: '10px 15px', outline: 'none', resize: 'none', height: '42px', fontSize: '16px' }}
               />
               <button 
                 onClick={handleSendGlobal}
