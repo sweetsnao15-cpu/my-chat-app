@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 
+// ... (省略: CameraIcon, InitialAvatar, ADMIN_ID) ...
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
 const CameraIcon = () => (
@@ -33,13 +34,12 @@ export default function ChatPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  
   const [contextMenu, setContextMenu] = useState(null);
   const longPressTimer = useRef(null);
-  
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
 
+  // ... (省略: useEffects, loadProfile, fetchMessages, authListeners) ...
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "42px";
@@ -136,6 +136,26 @@ export default function ChatPage() {
         </div>
       )}
 
+      {isModalOpen && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ width: '100%', maxWidth: '320px', background: '#1a1a1a', padding: '30px', borderRadius: '25px', border: '2px solid #800000', textAlign: 'center' }}>
+            <label style={{ display: 'block', margin: '0 auto 20px', width: '100px', height: '100px', borderRadius: '50%', border: '2px solid #D4AF37', overflow: 'hidden' }}>
+              {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <InitialAvatar name={profile.username} size="100px" fontSize="3rem" />}
+              <input type="file" accept="image/*" onChange={async (e)=>{
+                const f=e.target.files[0]; if(!f)return;
+                const p=`avatars/${user.id}`;
+                await supabase.storage.from('chat-images').upload(p,f,{upsert:true});
+                const {data:{publicUrl:u}}=supabase.storage.from('chat-images').getPublicUrl(p);
+                setProfile({...profile, avatar_url:u});
+              }} style={{ display: 'none' }} />
+            </label>
+            <input value={profile.username} onChange={e => setProfile({ ...profile, username: e.target.value })} style={{ width: '100%', padding: '12px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px', textAlign: 'center' }} />
+            <button onClick={async() => { await supabase.from('profiles').upsert({ id: user.id, username: profile.username, avatar_url: profile.avatar_url }); setIsModalOpen(false); }} style={{ width: '100%', padding: '12px', background: '#800000', color: '#fff', border: 'none', fontWeight: 'bold' }}>SAVE</button>
+            <button onClick={() => setIsModalOpen(false)} style={{ marginTop: '10px', background: 'none', border: 'none', color: '#D4AF37' }}>CLOSE</button>
+          </div>
+        </div>
+      )}
+
       <header style={{ padding: '25px 25px 10px 45px', background: '#800000', display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '95px', borderBottom: '2px solid #D4AF37', flexShrink: 0 }}>
         <h1 style={{ fontSize: '2.4rem', fontFamily: 'serif', fontStyle: 'italic', margin: 0 }}>for VAU</h1>
         <div onClick={() => setIsModalOpen(true)} style={{ cursor: 'pointer' }}>
@@ -157,17 +177,21 @@ export default function ChatPage() {
                 style={{ marginBottom: '22px', textAlign: isMe ? 'right' : 'left' }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                  {/* 改行対応強化ポイント: white-space と display を調整 */}
                   <div style={{ 
                     padding: m.is_image ? '5px' : '12px 18px', 
                     background: 'rgba(128, 0, 0, 0.85)', 
                     borderRadius: isMe ? '20px 20px 0 20px' : '20px 20px 20px 0', 
-                    maxWidth: '85%', color: '#fff', 
+                    maxWidth: '85%', 
+                    color: '#fff', 
                     border: isMe ? 'none' : '2px solid #D4AF37',
                     boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
                     wordBreak: 'break-word',
-                    whiteSpace: 'pre-wrap', // 改行対応
+                    overflowWrap: 'anywhere',
+                    whiteSpace: 'pre-wrap', 
                     textAlign: 'left',
-                    display: 'inline-block' // スマホ用
+                    display: 'block', // inline-block から変更して確実に幅を制御
+                    width: 'fit-content'
                   }}>
                     {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} alt="" /> : m.content}
                   </div>
@@ -183,6 +207,7 @@ export default function ChatPage() {
         <div ref={scrollRef} />
       </div>
 
+      {/* 送信エリア */}
       <div style={{ padding: '15px 20px', background: '#800000', display: 'flex', gap: '12px', alignItems: 'flex-end', borderTop: '2px solid #D4AF37', paddingBottom: 'calc(15px + env(safe-area-inset-bottom))' }}>
         <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <CameraIcon /><input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
