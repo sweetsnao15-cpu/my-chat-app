@@ -4,9 +4,12 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-// アバター表示コンポーネント
-const InitialAvatar = ({ name, size = '45px', fontSize = '1.1rem' }) => {
-  const initial = name && name.trim() ? Array.from(name.trim())[0].toUpperCase() : "V";
+// アバターコンポーネント（ゲストのアイコンを反映）
+const GuestAvatar = ({ profile, size = '40px', fontSize = '1rem' }) => {
+  if (profile?.avatar_url) {
+    return <img src={profile.avatar_url} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '1px solid #D4AF37' }} alt="" />;
+  }
+  const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "G";
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
@@ -18,190 +21,173 @@ const InitialAvatar = ({ name, size = '45px', fontSize = '1.1rem' }) => {
 };
 
 export default function AdminPage() {
-  const [view, setView] = useState('DIRECT'); 
-  const [users, setUsers] = useState([]);
-  const [selectedUserId, setSelectedUserId] = useState(null);
-  const [messages, setMessages] = useState([]); // DIRECT用
-  const [allMessages, setAllMessages] = useState([]); // GLOBAL用
-  const [globalText, setGlobalText] = useState(''); 
-  
+  const [viewMode, setViewMode] = useState('GLOBAL'); // 'GLOBAL' or 'DIRECT'
+  const [guests, setGuests] = useState([]);
+  const [selectedGuestId, setSelectedGuestId] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [inputText, setInputText] = useState('');
+  const [user, setUser] = useState(null);
   const scrollRef = useRef(null);
-  const globalScrollRef = useRef(null);
 
-  // ユーザーリストと最新プレビューの取得
-  const fetchUsers = useCallback(async () => {
+  // ゲスト一覧とプロフィールの取得
+  const fetchGuests = useCallback(async () => {
     const { data: profiles } = await supabase.from('profiles').select('*');
-    const { data: msgs } = await supabase.from('messages').select('*').order('created_at', { ascending: false });
-    if (profiles && msgs) {
-      const usersWithLastMsg = profiles.map(u => {
-        const lastMsg = msgs.find(m => m.user_id === u.id || m.receiver_id === u.id);
-        return { ...u, lastMessage: lastMsg ? lastMsg.content : "メッセージはありません" };
-      });
-      setUsers(usersWithLastMsg);
-    }
+    if (profiles) setGuests(profiles.filter(p => p.id !== ADMIN_ID));
   }, []);
 
-  // 【復旧】個別メッセージの取得と既読更新
+  // メッセージの取得
   const fetchMessages = useCallback(async () => {
-    if (!selectedUserId) return;
-    const { data } = await supabase
-      .from('messages')
-      .select('*')
-      .or(`and(user_id.eq.${selectedUserId},receiver_id.eq.${ADMIN_ID}),and(user_id.eq.${ADMIN_ID},receiver_id.eq.${selectedUserId})`)
-      .order('created_at', { ascending: true });
-    
-    if (data) {
-      setMessages(data);
-      const unreadIds = data.filter(m => m.user_id !== ADMIN_ID && !m.is_read).map(m => m.id);
-      if (unreadIds.length > 0) {
-        await supabase.from('messages').update({ is_read: true }).in('id', unreadIds);
-      }
-    }
-  }, [selectedUserId]);
-
-  const fetchAllMessages = useCallback(async () => {
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
-    if (data) setAllMessages(data);
+    if (data) setMessages(data);
   }, []);
 
-  useEffect(() => { fetchUsers(); fetchAllMessages(); }, [fetchUsers, fetchAllMessages]);
+  // 既読処理：選択中のゲストからのメッセージを既読にする
+  const markAsRead = useCallback(async (guestId) => {
+    if (!guestId) return;
+    await supabase
+      .from('messages')
+      .update({ is_read: true })
+      .eq('user_id', guestId)
+      .eq('receiver_id', ADMIN_ID)
+      .eq('is_read', false);
+  }, []);
 
   useEffect(() => {
-    const channel = supabase.channel('admin_sync').on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-      fetchMessages(); fetchAllMessages(); fetchUsers();
-    }).subscribe();
+    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
+    fetchGuests();
+    fetchMessages();
+
+    const channel = supabase.channel('admin_room')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+        fetchMessages();
+      })
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [selectedUserId, fetchMessages, fetchAllMessages, fetchUsers]);
+  }, [fetchGuests, fetchMessages]);
 
-  // スクロール制御
-  const jumpToBottom = useCallback(() => {
-    requestAnimationFrame(() => {
-      if (view === 'GLOBAL' && globalScrollRef.current) {
-        globalScrollRef.current.scrollIntoView({ behavior: "instant", block: "end" });
-      } else if (selectedUserId && scrollRef.current) {
-        scrollRef.current.scrollIntoView({ behavior: "instant", block: "end" });
-      }
-    });
-  }, [view, selectedUserId]);
-
-  useEffect(() => { jumpToBottom(); }, [allMessages, messages, view, jumpToBottom]);
-
-  // 【強化】GLOBAL一斉送信
-  const handleGlobalSend = async () => {
-    if (!globalText.trim()) return;
-    if (!confirm(`${users.length}名の全ゲストに送信しますか？`)) return;
-
-    const { data: currentUsers, error: userError } = await supabase.from('profiles').select('id');
-    if (userError || !currentUsers) {
-      alert("送信先リストの取得に失敗しました");
-      return;
+  // メッセージが更新されたら既読処理を実行
+  useEffect(() => {
+    if (viewMode === 'DIRECT' && selectedGuestId) {
+      markAsRead(selectedGuestId);
     }
+  }, [messages, viewMode, selectedGuestId, markAsRead]);
 
-    // Promise.allで全送信を実行
-    const sendPromises = currentUsers.map(u => 
-      supabase.from('messages').insert([{ 
-        content: globalText, 
-        user_id: ADMIN_ID, 
-        receiver_id: u.id, 
-        is_image: false, 
-        is_read: false 
-      }])
-    );
+  useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, viewMode, selectedGuestId]);
 
-    const results = await Promise.all(sendPromises);
-    if (results.some(r => r.error)) {
-      alert("一部のゲストへの送信に失敗しました");
-    } else {
-      setGlobalText('');
+  // 送信処理
+  const handleSend = async () => {
+    const text = inputText.trim();
+    if (!text || !user) return;
+    setInputText('');
+
+    if (viewMode === 'GLOBAL') {
+      // 一斉送信：全ゲストに対して個別にインサート
+      const bulkMessages = guests.map(g => ({
+        content: text,
+        user_id: ADMIN_ID,
+        receiver_id: g.id,
+        is_image: false,
+        is_read: false
+      }));
+      await supabase.from('messages').insert(bulkMessages);
+    } else if (selectedGuestId) {
+      // 個別送信
+      await supabase.from('messages').insert([{
+        content: text,
+        user_id: ADMIN_ID,
+        receiver_id: selectedGuestId,
+        is_image: false,
+        is_read: false
+      }]);
     }
   };
 
-  const renderMessageList = (msgs, isGlobal = false) => {
-    return msgs.map((m, i) => {
-      const isMe = m.user_id === ADMIN_ID;
-      const sender = users.find(u => u.id === m.user_id);
-      const mDate = new Date(m.created_at).toLocaleDateString();
-      const showDate = i === 0 || mDate !== new Date(msgs[i - 1].created_at).toLocaleDateString();
-
-      return (
-        <div key={m.id}>
-          {showDate && <div style={{ textAlign: 'center', margin: '30px 0', fontSize: '0.8rem', color: '#666', fontFamily: 'serif' }}>― {mDate} ―</div>}
-          <div style={{ marginBottom: '22px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', maxWidth: '85%', flexDirection: isMe ? 'row-reverse' : 'row' }}>
-              {!isMe && <InitialAvatar name={sender?.username || "G"} size="35px" fontSize="0.9rem" />}
-              <div>
-                {!isMe && isGlobal && <div style={{ fontSize: '0.7rem', color: '#D4AF37', marginBottom: '4px', fontWeight: 'bold' }}>{sender?.username || "Guest"}</div>}
-                <div style={{ 
-                  padding: m.is_image ? '5px' : '12px 18px', background: 'rgba(128, 0, 0, 0.85)', 
-                  borderRadius: isMe ? '20px 20px 0 20px' : '20px 20px 20px 0', 
-                  color: '#fff', border: isMe ? 'none' : '2px solid #D4AF37',
-                  whiteSpace: 'pre-wrap', textAlign: 'left', wordBreak: 'break-all'
-                }}>
-                  {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px' }} /> : m.content}
-                </div>
-                <div style={{ fontSize: '0.6rem', color: '#444', marginTop: '4px', textAlign: isMe ? 'right' : 'left' }}>
-                  {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    });
-  };
+  const selectedGuestProfile = guests.find(g => g.id === selectedGuestId);
 
   return (
-    <div style={{ width: '100%', height: '100dvh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      <header style={{ padding: '15px 25px', background: '#800000', borderBottom: '2px solid #D4AF37', flexShrink: 0 }}>
-        <h1 style={{ fontSize: '1.8rem', fontFamily: 'serif', fontStyle: 'italic', margin: 0 }}>for VAU - Host</h1>
-        <div style={{ display: 'flex', background: '#000', borderRadius: '25px', padding: '3px', border: '1px solid #D4AF37', marginTop: '10px' }}>
-          <button onClick={() => { setView('GLOBAL'); setSelectedUserId(null); }} style={{ flex: 1, padding: '8px', borderRadius: '22px', border: 'none', background: view === 'GLOBAL' ? '#D4AF37' : 'transparent', color: view === 'GLOBAL' ? '#000' : '#fff', fontWeight: 'bold' }}>GLOBAL</button>
-          <button onClick={() => setView('DIRECT')} style={{ flex: 1, padding: '8px', borderRadius: '22px', border: 'none', background: view === 'DIRECT' ? '#D4AF37' : 'transparent', color: view === 'DIRECT' ? '#000' : '#fff', fontWeight: 'bold' }}>DIRECT</button>
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff' }}>
+      
+      {/* ヘッダー */}
+      <header style={{ padding: '20px', background: '#800000', borderBottom: '2px solid #D4AF37', textAlign: 'center' }}>
+        <h1 style={{ fontSize: '1.8rem', fontFamily: 'serif', fontStyle: 'italic', margin: 0 }}>for VAU - HOST</h1>
+        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '20px' }}>
+          <button onClick={() => setViewMode('GLOBAL')} style={{ background: viewMode === 'GLOBAL' ? '#D4AF37' : 'transparent', color: viewMode === 'GLOBAL' ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px', fontSize: '0.8rem' }}>GLOBAL</button>
+          <button onClick={() => setViewMode('DIRECT')} style={{ background: viewMode === 'DIRECT' ? '#D4AF37' : 'transparent', color: viewMode === 'DIRECT' ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px', fontSize: '0.8rem' }}>DIRECT</button>
         </div>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-        {view === 'GLOBAL' ? (
-          <div style={{ paddingBottom: '100px' }}>
-            {renderMessageList(allMessages, true)}
-            <div ref={globalScrollRef} style={{ height: '20px' }} />
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* サイドバー（DIRECTモード時のみ表示） */}
+        {viewMode === 'DIRECT' && (
+          <div style={{ width: '80px', borderRight: '1px solid #333', overflowY: 'auto', padding: '10px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px' }}>
+            {guests.map(g => (
+              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', opacity: selectedGuestId === g.id ? 1 : 0.5, transition: '0.3s' }}>
+                <GuestAvatar profile={g} />
+              </div>
+            ))}
           </div>
-        ) : (
-          !selectedUserId ? (
-            users.map(u => (
-              <div key={u.id} onClick={() => setSelectedUserId(u.id)} style={{ padding: '15px 10px', borderBottom: '1px solid #222', display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer' }}>
-                <InitialAvatar name={u.username} />
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ fontWeight: 'bold', color: '#D4AF37' }}>{u.username || "Guest"}</div>
-                  <div style={{ fontSize: '0.8rem', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.lastMessage}</div>
-                </div>
-              </div>
-            ))
-          ) : (
-            // 【復旧】DIRECT個別チャット画面
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
-                <button onClick={() => setSelectedUserId(null)} style={{ background: 'none', border: 'none', color: '#D4AF37', fontSize: '1.2rem', cursor: 'pointer' }}>← Back</button>
-                <InitialAvatar name={users.find(u => u.id === selectedUserId)?.username} size="30px" fontSize="0.8rem" />
-                <span style={{ fontWeight: 'bold' }}>{users.find(u => u.id === selectedUserId)?.username}</span>
-              </div>
-              <div style={{ flex: 1 }}>
-                {renderMessageList(messages)}
-                <div ref={scrollRef} style={{ height: '20px' }} />
-              </div>
-            </div>
-          )
         )}
-      </div>
 
-      {view === 'GLOBAL' && (
-        <div style={{ position: 'fixed', bottom: 0, width: '100%', padding: '15px 20px 25px', background: '#800000', borderTop: '2px solid #D4AF37', zIndex: 10 }}>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-            <textarea value={globalText} onChange={e => setGlobalText(e.target.value)} placeholder="全ゲストに一斉送信..." style={{ flex: 1, padding: '12px 15px', background: '#000', color: '#fff', borderRadius: '15px', border: 'none', outline: 'none', resize: 'none', height: '45px', fontSize: '14px', whiteSpace: 'pre-wrap' }} />
-            <button onClick={handleGlobalSend} style={{ background: '#000', color: '#D4AF37', border: 'none', height: '45px', padding: '0 20px', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer' }}>SEND</button>
+        {/* チャットエリア */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+            {viewMode === 'GLOBAL' ? (
+              // GLOBALモード：全メッセージを表示
+              messages.map(m => {
+                const guest = guests.find(g => g.id === m.user_id || g.id === m.receiver_id);
+                const isFromAdmin = m.user_id === ADMIN_ID;
+                return (
+                  <div key={m.id} style={{ marginBottom: '15px', display: 'flex', gap: '10px', flexDirection: isFromAdmin ? 'row-reverse' : 'row' }}>
+                    {!isFromAdmin && <GuestAvatar profile={guest} size="30px" />}
+                    <div>
+                      {!isFromAdmin && <div style={{ fontSize: '0.7rem', color: '#D4AF37', marginBottom: '2px' }}>{guest?.username || 'Guest'}</div>}
+                      <div style={{ padding: '8px 12px', background: isFromAdmin ? '#500000' : '#1a1a1a', borderRadius: '10px', fontSize: '0.9rem', border: isFromAdmin ? 'none' : '1px solid #333' }}>
+                        {m.is_image ? '[Image]' : m.content}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              // DIRECTモード：特定のゲストとの履歴のみ
+              selectedGuestId ? (
+                messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId))
+                .map(m => {
+                  const isMe = m.user_id === ADMIN_ID;
+                  return (
+                    <div key={m.id} style={{ marginBottom: '15px', textAlign: isMe ? 'right' : 'left' }}>
+                      <div style={{ display: 'inline-block', padding: '10px 15px', background: isMe ? '#800000' : '#1a1a1a', borderRadius: '15px', border: isMe ? 'none' : '1px solid #D4AF37' }}>
+                        {m.is_image ? <img src={m.content} style={{ maxWidth: '200px', borderRadius: '10px' }} /> : m.content}
+                      </div>
+                      <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '3px' }}>
+                        {isMe && m.is_read && <span style={{ color: '#D4AF37', marginRight: '5px' }}>既読</span>}
+                        {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>ゲストを選択してください</div>
+              )
+            )}
+            <div ref={scrollRef} />
+          </div>
+
+          {/* 入力エリア */}
+          <div style={{ padding: '15px', background: '#800000', display: 'flex', gap: '10px', borderTop: '2px solid #D4AF37' }}>
+            <textarea 
+              value={inputText} 
+              onChange={e => setInputText(e.target.value)} 
+              placeholder={viewMode === 'GLOBAL' ? "全ゲストへ送信..." : `${selectedGuestProfile?.username || 'ゲスト'}へ送信...`}
+              style={{ flex: 1, background: '#800000', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px', padding: '10px 15px', outline: 'none', resize: 'none', height: '42px' }}
+            />
+            <button 
+              onClick={handleSend}
+              style={{ background: '#000', color: '#D4AF37', padding: '0 20px', borderRadius: '20px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', fontSize: '1.1rem', border: 'none', cursor: 'pointer' }}
+            >SEND</button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
