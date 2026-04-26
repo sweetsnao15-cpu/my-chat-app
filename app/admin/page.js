@@ -1,10 +1,9 @@
 "use client";
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'; // useMemoを追加
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-// 共通アバターコンポーネント
 const Avatar = ({ profile, size = '40px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "G";
   return (
@@ -55,19 +54,12 @@ export default function AdminPage() {
 
   useEffect(() => { setTimeout(scrollToBottom, 100); }, [viewMode, selectedGuestId]);
 
-  // 【新着順ソートロジック】
   const sortedGuests = useMemo(() => {
     const guestList = guests.filter(g => g.id !== ADMIN_ID);
-    
     return guestList.sort((a, b) => {
-      // 各ゲストの最終メッセージ（送信・受信問わず）を取得
       const lastMsgA = [...messages].reverse().find(m => m.user_id === a.id || m.receiver_id === a.id);
       const lastMsgB = [...messages].reverse().find(m => m.user_id === b.id || m.receiver_id === b.id);
-      
-      const timeA = lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0;
-      const timeB = lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0;
-      
-      return timeB - timeA; // 時間が新しい方を上にする
+      return (lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0) - (lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0);
     });
   }, [guests, messages]);
 
@@ -121,9 +113,7 @@ export default function AdminPage() {
           return (
             <div key={m.id}>
               {showDate && (
-                <div style={{ textAlign: 'center', margin: '30px 0 15px', fontSize: '0.7rem', color: '#D4AF37', letterSpacing: '0.1rem', fontFamily: 'serif' }}>
-                  ― {currentDate} ―
-                </div>
+                <div style={{ textAlign: 'center', margin: '30px 0 15px', fontSize: '0.7rem', color: '#D4AF37', letterSpacing: '0.1rem', fontFamily: 'serif' }}>― {currentDate} ―</div>
               )}
               <div 
                 onContextMenu={(e) => handleContextMenu(e, m)}
@@ -139,24 +129,18 @@ export default function AdminPage() {
                     <span style={{ fontSize: '0.65rem', color: '#D4AF37' }}>{senderProfile?.username || 'Guest'}</span>
                   </div>
                 )}
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
                   <div style={{ 
                     padding: m.is_image ? '5px' : '12px 16px', 
-                    background: isMe ? '#500000' : '#1a1a1a', 
-                    borderRadius: isMe ? '18px 18px 2px 18px' : '18px 18px 18px 2px', 
-                    border: isMe ? 'none' : '1px solid #D4AF37', 
-                    maxWidth: '100%', 
-                    fontSize: '0.9rem', 
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word'
+                    background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
+                    backdropFilter: 'blur(4px)',
+                    borderRadius: isMe ? '2px 18px 18px 18px' : '18px 2px 18px 18px', 
+                    border: isMe ? '1px solid rgba(128, 0, 0, 0.5)' : '1px solid #D4AF37', 
+                    maxWidth: '100%', fontSize: '0.9rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
                   }}>
-                    {m.is_image ? (
-                      <img src={m.content} style={{ maxWidth: '200px', borderRadius: '10px', display: 'block' }} alt="sent" />
-                    ) : (
-                      m.content
-                    )}
+                    {m.is_image ? <img src={m.content} style={{ maxWidth: '200px', borderRadius: '10px', display: 'block' }} alt="" /> : m.content}
                   </div>
-                  <div style={{ fontSize: '0.55rem', color: '#666', marginBottom: '2px' }}>
+                  <div style={{ fontSize: '0.55rem', color: '#666', marginTop: 'auto', marginBottom: '2px' }}>
                     {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
@@ -170,17 +154,12 @@ export default function AdminPage() {
 
   return (
     <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif' }}>
-      
-      {/* 長押しメニュー */}
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 60, left: contextMenu.x - 40, background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '10px', zIndex: 9999, overflow: 'hidden' }}>
-          <div onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }} style={{ padding: '10px 20px', fontSize: '0.8rem', borderBottom: '1px solid #333', cursor: 'pointer' }}>コピー</div>
-          {contextMenu.msg.user_id === ADMIN_ID && (
-            <div onClick={deleteMessage} style={{ padding: '10px 20px', fontSize: '0.8rem', color: '#ff4d4d', cursor: 'pointer' }}>送信取消</div>
-          )}
+        <div style={{ position: 'fixed', top: contextMenu.y - 60, left: contextMenu.x - 40, background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '10px', zIndex: 9999 }}>
+          <div onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }} style={{ padding: '10px 20px', fontSize: '0.8rem', borderBottom: '1px solid #333' }}>コピー</div>
+          {contextMenu.msg.user_id === ADMIN_ID && <div onClick={deleteMessage} style={{ padding: '10px 20px', fontSize: '0.8rem', color: '#ff4d4d' }}>送信取消</div>}
         </div>
       )}
-
       <header style={{ padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
         <h1 style={{ fontSize: '1.4rem', fontStyle: 'italic', margin: 0, letterSpacing: '2px' }}>for VAU - HOST</h1>
         <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px' }}>
@@ -189,7 +168,6 @@ export default function AdminPage() {
           ))}
         </div>
       </header>
-
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {viewMode === 'DIRECT' && (
           <div style={{ width: '85px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '25px', padding: '20px 0', flexShrink: 0 }}>
@@ -201,12 +179,8 @@ export default function AdminPage() {
             ))}
           </div>
         )}
-
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#050505' }}>
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 15px' }}>
-            {renderMessages()}
-          </div>
-
+          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 15px' }}>{renderMessages()}</div>
           {viewMode === 'GLOBAL' && (
             <div style={{ padding: '15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0 }}>
               <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
