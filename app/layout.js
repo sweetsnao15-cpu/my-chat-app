@@ -8,13 +8,18 @@ export const viewport = {
 };
 
 export const metadata = {
-  title: "for VAU", // サイト名を「for VAU」に変更
+  title: "for VAU",
   description: "Private chat for VAU",
-  manifest: "/manifest.json", // マニフェストファイルを紐付け
+  manifest: "/manifest.json",
+  // アイコン設定をmetadataに集約
+  icons: {
+    icon: "/icon-512.png",
+    apple: "/icon-512.png",
+  },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent", // iPhoneで全画面表示にする設定
-    title: "for VAU", // ホーム画面に追加した際の名前
+    statusBarStyle: "black-translucent",
+    title: "for VAU", // ホーム画面での表示名
   },
 };
 
@@ -22,8 +27,10 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ja" className="h-full antialiased">
       <head>
-        {/* iPhoneでのアプリアイコン指定 */}
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        {/* iPhone用のアイコン指定を512に更新 */}
+        <link rel="apple-touch-icon" href="/icon-512.png" />
+        {/* ホーム画面追加時のタイトルを補強 */}
+        <meta name="apple-mobile-web-app-title" content="for VAU" />
       </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
