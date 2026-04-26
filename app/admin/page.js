@@ -13,6 +13,7 @@ const GuestAvatarWithBadge = ({ profile, unreadCount, size = '50px', isSelected 
       ) : (
         <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'linear-gradient(135deg, #D4AF37 0%, #B69121 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.1rem', border: '1px solid #D4AF37' }}>{initial}</div>
       )}
+      {/* 0より大きい場合のみ、そのゲストの未読数だけを表示 */}
       {unreadCount > 0 && (
         <div style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#ff4d4d', color: '#fff', fontSize: '10px', fontWeight: 'bold', minWidth: '18px', height: '18px', borderRadius: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #000', padding: '0 4px', zIndex: 10 }}>
           {unreadCount}
@@ -43,14 +44,12 @@ export default function AdminPage() {
 
   const markAsRead = useCallback(async (guestId) => {
     if (!guestId) return;
-    // 1. DBを更新
     await supabase.from('messages')
       .update({ is_read: true })
       .eq('user_id', guestId)
       .eq('receiver_id', ADMIN_ID)
       .eq('is_read', false);
     
-    // 2. ローカルステートを直接更新（これで開き直しても0になる）
     setMessages(prev => prev.map(m => 
       (m.user_id === guestId && m.receiver_id === ADMIN_ID) ? { ...m, is_read: true } : m
     ));
@@ -91,6 +90,8 @@ export default function AdminPage() {
   };
 
   const openMenu = (e, m) => {
+    // GLOBALモードの時だけメニューを許可
+    if (viewMode !== 'GLOBAL') return;
     e.preventDefault();
     const x = e.clientX || (e.touches && e.touches[0].clientX);
     const y = e.clientY || (e.touches && e.touches[0].clientY);
@@ -135,7 +136,6 @@ export default function AdminPage() {
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 50, background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
           <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '12px 20px', fontSize: '0.9rem', borderBottom: contextMenu.message.user_id === ADMIN_ID ? '1px solid #333' : 'none', cursor: 'pointer' }}>コピー</div>
-          {/* 【ゲスト側と統一】自分のメッセージ(ADMIN_ID)の時だけ送信取消を表示 */}
           {contextMenu.message.user_id === ADMIN_ID && (
             <div onClick={deleteMessage} style={{ padding: '12px 20px', fontSize: '0.9rem', color: '#ff4d4d', cursor: 'pointer' }}>送信取消</div>
           )}
@@ -155,6 +155,7 @@ export default function AdminPage() {
         {viewMode === 'DIRECT' && (
           <div style={{ width: '90px', borderRight: '1px solid #333', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
             {sortedGuests.map(g => {
+              // 【重要】そのゲスト(g.id)からADMIN宛の未読メッセージだけをカウント
               const unread = messages.filter(m => m.user_id === g.id && m.receiver_id === ADMIN_ID && !m.is_read).length;
               return (
                 <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', textAlign: 'center', width: '100%' }}>
@@ -200,16 +201,8 @@ export default function AdminPage() {
           </div>
 
           <div style={{ padding: '15px', background: '#800000', display: 'flex', gap: '10px', borderTop: '2px solid #D4AF37', flexShrink: 0 }}>
-            <textarea 
-              value={inputText} 
-              onChange={e => setInputText(e.target.value)} 
-              placeholder="全ゲストへ一斉送信..." 
-              style={{ flex: 1, background: '#800000', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px', padding: '10px 15px', outline: 'none', resize: 'none', height: '42px', fontSize: '16px' }} 
-            />
-            <button 
-              onClick={handleSendGlobal} 
-              style={{ background: '#000', color: '#D4AF37', padding: '0 20px', borderRadius: '20px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', border: 'none', cursor: 'pointer' }}
-            >SEND ALL</button>
+            <textarea value={inputText} onChange={e => setInputText(e.target.value)} placeholder="全ゲストへ一斉送信..." style={{ flex: 1, background: '#800000', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px', padding: '10px 15px', outline: 'none', resize: 'none', height: '42px', fontSize: '16px' }} />
+            <button onClick={handleSendGlobal} style={{ background: '#000', color: '#D4AF37', padding: '0 20px', borderRadius: '20px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', border: 'none', cursor: 'pointer' }}>SEND ALL</button>
           </div>
         </div>
       </div>
