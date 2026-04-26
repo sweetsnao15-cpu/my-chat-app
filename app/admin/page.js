@@ -20,15 +20,14 @@ export default function AdminPage() {
   const [view, setView] = useState('DIRECT');
   const [users, setUsers] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
-  const [messages, setMessages] = useState([]); // 個別用
-  const [allMessages, setAllMessages] = useState([]); // GLOBAL用
+  const [messages, setMessages] = useState([]); 
+  const [allMessages, setAllMessages] = useState([]); 
   const [globalText, setGlobalText] = useState('');
   
   const scrollRef = useRef(null);
   const globalScrollRef = useRef(null);
 
   const fetchUsers = useCallback(async () => {
-    // プロフィールと最新メッセージを結合するためにメッセージも取得
     const { data: profiles } = await supabase.from('profiles').select('*');
     const { data: msgs } = await supabase.from('messages').select('*').order('created_at', { ascending: false });
     
@@ -47,6 +46,12 @@ export default function AdminPage() {
     if (data) {
       const filtered = data.filter(m => (m.user_id === selectedUserId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedUserId));
       setMessages(filtered);
+
+      // 【既読処理】ホストが画面を開いたら、相手からの未読メッセージを既読にする
+      const unreadIds = filtered.filter(m => m.user_id !== ADMIN_ID && !m.is_read).map(m => m.id);
+      if (unreadIds.length > 0) {
+        await supabase.from('messages').update({ is_read: true }).in('id', unreadIds);
+      }
     }
   }, [selectedUserId]);
 
@@ -83,7 +88,6 @@ export default function AdminPage() {
 
   const selectedUser = users.find(u => u.id === selectedUserId);
 
-  // 日付と吹き出しのレンダリング関数（共通化）
   const renderMessageList = (msgs, isGlobal = false) => {
     return msgs.map((m, i) => {
       const isMe = m.user_id === ADMIN_ID;
@@ -127,7 +131,6 @@ export default function AdminPage() {
 
   return (
     <div style={{ width: '100%', height: '100dvh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column' }}>
-      
       <header style={{ padding: '15px 25px', background: '#800000', borderBottom: '2px solid #D4AF37', flexShrink: 0 }}>
         <h1 style={{ fontSize: '1.8rem', fontFamily: 'serif', fontStyle: 'italic', marginBottom: '10px', margin: 0 }}>for VAU - Host</h1>
         <div style={{ display: 'flex', background: '#000', borderRadius: '25px', padding: '3px', border: '1px solid #D4AF37' }}>
@@ -137,28 +140,20 @@ export default function AdminPage() {
       </header>
 
       <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
-        
         {view === 'GLOBAL' ? (
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
             <div style={{ flex: 1, padding: '20px 20px 120px' }}>
               {renderMessageList(allMessages, true)}
               <div ref={globalScrollRef} />
             </div>
-            {/* GLOBAL下部送信バー */}
             <div style={{ position: 'fixed', bottom: 0, width: '100%', padding: '15px 20px 30px', background: '#800000', borderTop: '2px solid #D4AF37', zIndex: 10 }}>
               <div style={{ display: 'flex', gap: '10px' }}>
-                <input 
-                  value={globalText} 
-                  onChange={e => setGlobalText(e.target.value)} 
-                  placeholder="全員に一斉送信..." 
-                  style={{ flex: 1, padding: '12px 20px', background: '#000', color: '#fff', borderRadius: '25px', border: '1px solid #333', outline: 'none' }} 
-                />
+                <input value={globalText} onChange={e => setGlobalText(e.target.value)} placeholder="全員に一斉送信..." style={{ flex: 1, padding: '12px 20px', background: '#000', color: '#fff', borderRadius: '25px', border: '1px solid #333', outline: 'none' }} />
                 <button onClick={handleGlobalSend} style={{ background: '#000', color: '#D4AF37', border: 'none', padding: '0 25px', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer', fontFamily: 'serif', fontStyle: 'italic' }}>SEND ALL</button>
               </div>
             </div>
           </div>
         ) : (
-          /* DIRECT VIEW */
           <>
             {!selectedUserId ? (
               <div style={{ padding: '10px' }}>
@@ -167,9 +162,7 @@ export default function AdminPage() {
                     {u.avatar_url ? <img src={u.avatar_url} style={{ width: '50px', height: '50px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #D4AF37' }} alt="" /> : <InitialAvatar name={u.username} />}
                     <div style={{ flex: 1, overflow: 'hidden' }}>
                       <div style={{ fontWeight: 'bold', color: '#D4AF37' }}>{u.username || "Guest"}</div>
-                      <div style={{ fontSize: '0.8rem', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '4px' }}>
-                        {u.lastMessage}
-                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '4px' }}>{u.lastMessage}</div>
                     </div>
                     <div style={{ color: '#D4AF37' }}>→</div>
                   </div>
@@ -185,7 +178,6 @@ export default function AdminPage() {
                   {renderMessageList(messages)}
                   <div ref={scrollRef} />
                 </div>
-                {/* DIRECTには送信機能なし */}
               </div>
             )}
           </>
