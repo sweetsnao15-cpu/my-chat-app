@@ -33,7 +33,10 @@ export default function ChatPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  // 長押しメニュー用
   const [contextMenu, setContextMenu] = useState(null);
+  const longPressTimer = useRef(null);
   
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
@@ -94,13 +97,30 @@ export default function ChatPage() {
     handleSend(publicUrl);
   };
 
-  const handleContextMenu = (e, message) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, message });
+  // --- 長押しメニュー関連 ---
+  const handleTouchStart = (e, m) => {
+    longPressTimer.current = setTimeout(() => {
+      const touch = e.touches[0];
+      setContextMenu({ x: touch.clientX, y: touch.clientY, message: m });
+    }, 600); // 0.6秒長押しでメニュー表示
   };
 
-  const deleteMessage = async (id) => {
+  const handleTouchEnd = () => {
+    clearTimeout(longPressTimer.current);
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    setContextMenu(null);
+  };
+
+  const undoSend = async (id) => {
     await supabase.from('messages').delete().eq('id', id);
+    setContextMenu(null);
+  };
+
+  const deleteLocally = (id) => {
+    setMessages(messages.filter(m => m.id !== id));
     setContextMenu(null);
   };
 
@@ -121,13 +141,19 @@ export default function ChatPage() {
   );
 
   return (
-    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff' }}>
+    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', position: 'relative' }}>
       
+      {/* 長押しメニュー本体 */}
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y, left: contextMenu.x, background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '8px', zIndex: 1000 }}>
-          <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '10px 20px', cursor: 'pointer', borderBottom: '1px solid #333' }}>コピー</div>
+        <div style={{
+          position: 'fixed', top: contextMenu.y - 80, left: Math.min(contextMenu.x, window.innerWidth - 160),
+          background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, overflow: 'hidden',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.5)', width: '150px'
+        }}>
+          <div onClick={() => copyToClipboard(contextMenu.message.content)} style={{ padding: '12px 15px', borderBottom: '1px solid #333', fontSize: '0.9rem', cursor: 'pointer' }}>コピー</div>
+          <div onClick={() => deleteLocally(contextMenu.message.id)} style={{ padding: '12px 15px', borderBottom: '1px solid #333', fontSize: '0.9rem', cursor: 'pointer' }}>削除 (自分のみ)</div>
           {contextMenu.message.user_id === user.id && (
-            <div onClick={() => deleteMessage(contextMenu.message.id)} style={{ padding: '10px 20px', cursor: 'pointer', color: '#ff4d4d' }}>送信取り消し</div>
+            <div onClick={() => undoSend(contextMenu.message.id)} style={{ padding: '12px 15px', color: '#ff4d4d', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 'bold' }}>送信を取り消す</div>
           )}
         </div>
       )}
@@ -136,7 +162,7 @@ export default function ChatPage() {
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ width: '100%', maxWidth: '320px', background: '#1a1a1a', padding: '30px', borderRadius: '25px', border: '2px solid #800000', textAlign: 'center' }}>
             <label style={{ display: 'block', margin: '0 auto 20px', width: '100px', height: '100px', borderRadius: '50%', border: '2px solid #D4AF37', overflow: 'hidden' }}>
-              {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <InitialAvatar name={profile.username} size="100px" fontSize="3rem" />}
+              {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" /> : <InitialAvatar name={profile.username} size="100px" fontSize="3rem" />}
               <input type="file" accept="image/*" onChange={async (e)=>{
                 const f=e.target.files[0]; if(!f)return;
                 const p=`avatars/${user.id}`;
@@ -152,10 +178,10 @@ export default function ChatPage() {
         </div>
       )}
 
-      <header style={{ padding: '25px 25px 10px 45px', background: '#800000', display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '95px', borderBottom: '2px solid #D4AF37' }}>
+      <header style={{ padding: '25px 25px 10px 45px', background: '#800000', display: 'flex', justifyContent: 'space-between', alignItems: 'center', minHeight: '95px', borderBottom: '2px solid #D4AF37', flexShrink: 0 }}>
         <h1 style={{ fontSize: '2.4rem', fontFamily: 'serif', fontStyle: 'italic', margin: 0 }}>for VAU</h1>
         <div onClick={() => setIsModalOpen(true)} style={{ cursor: 'pointer' }}>
-          {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '50px', height: '50px', borderRadius: '50%', border: '2px solid #D4AF37', objectFit: 'cover' }} /> : <InitialAvatar name={profile.username} />}
+          {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '50px', height: '50px', borderRadius: '50%', border: '2px solid #D4AF37', objectFit: 'cover' }} alt="" /> : <InitialAvatar name={profile.username} />}
         </div>
       </header>
 
@@ -167,7 +193,12 @@ export default function ChatPage() {
           return (
             <div key={m.id}>
               {showDate && <div style={{ textAlign: 'center', margin: '30px 0', fontSize: '0.85rem', color: '#999', fontFamily: 'serif', letterSpacing: '1px' }}>― {mDate} ―</div>}
-              <div onContextMenu={(e) => handleContextMenu(e, m)} style={{ marginBottom: '22px', textAlign: isMe ? 'right' : 'left' }}>
+              <div 
+                onTouchStart={(e) => handleTouchStart(e, m)}
+                onTouchEnd={handleTouchEnd}
+                onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, message: m }); }}
+                style={{ marginBottom: '22px', textAlign: isMe ? 'right' : 'left' }}
+              >
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                   <div style={{ 
                     padding: m.is_image ? '5px' : '12px 18px', 
@@ -176,9 +207,11 @@ export default function ChatPage() {
                     maxWidth: '85%', color: '#fff', 
                     border: isMe ? 'none' : '2px solid #D4AF37',
                     boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
-                    wordBreak: 'break-all'
+                    wordBreak: 'break-all',
+                    whiteSpace: 'pre-wrap', // 改行を反映
+                    textAlign: 'left'
                   }}>
-                    {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} /> : m.content}
+                    {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} alt="" /> : m.content}
                   </div>
                   <span style={{ fontSize: '0.6rem', color: '#666', marginTop: '5px' }}>{new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                 </div>
