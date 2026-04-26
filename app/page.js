@@ -4,7 +4,6 @@ import { supabase } from '../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-// カメラアイコン
 const CameraIcon = () => (
   <svg width="22" height="20" viewBox="0 0 24 22" fill="none" stroke="#D4AF37" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
@@ -12,7 +11,6 @@ const CameraIcon = () => (
   </svg>
 );
 
-// 初期アバター
 const InitialAvatar = ({ name, size = '48px', fontSize = '1.4rem', pointerEvents = 'auto' }) => {
   const initial = name && name.trim() ? Array.from(name.trim())[0].toUpperCase() : "V";
   return (
@@ -35,10 +33,11 @@ export default function ChatPage() {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [isInitialLoad, setIsInitialLoad] = useState(true); // 初回読み込み判定
+  const [loading, setLoading] = useState(true); // Authチェック用
+  const [isReady, setIsReady] = useState(false); // メッセージ配置完了フラグ
   
   const scrollRef = useRef(null);
+  const scrollContainerRef = useRef(null);
   const textareaRef = useRef(null);
 
   const loadProfile = useCallback(async (id) => {
@@ -49,7 +48,9 @@ export default function ChatPage() {
   const fetchMessages = useCallback(async (uid) => {
     if (!uid) return;
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
-    if (data) setMessages(data.filter(m => m.user_id === uid || m.receiver_id === uid));
+    if (data) {
+      setMessages(data.filter(m => m.user_id === uid || m.receiver_id === uid));
+    }
   }, []);
 
   useEffect(() => {
@@ -68,21 +69,27 @@ export default function ChatPage() {
     if (!user) return;
     fetchMessages(user.id);
     const channel = supabase.channel(`room_${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-        setIsInitialLoad(false); // 新着メッセージはアニメーションさせる
-        fetchMessages(user.id);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages(user.id))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, fetchMessages]);
 
-  // 【修正】スクロール挙動：ログイン後は「ぱっと（auto）」、それ以外は「スムーズ（smooth）」
+  // 【重要】初回表示のジャンプと新着メッセージの挙動を分ける
   useEffect(() => {
     if (messages.length > 0) {
-      scrollRef.current?.scrollIntoView({ behavior: isInitialLoad ? "auto" : "smooth" });
-      if (isInitialLoad) setIsInitialLoad(false); 
+      if (!isReady) {
+        // 初回：一瞬で最下部へ移動
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+        // 位置確定後にフェードインさせる
+        setTimeout(() => setIsReady(true), 50);
+      } else {
+        // 運用中：新しいメッセージが来たらスムーズにスクロール
+        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
     }
-  }, [messages, isInitialLoad]);
+  }, [messages, isReady]);
 
   const handleSend = async (imgUrl = null) => {
     const text = inputText.trim();
@@ -111,7 +118,6 @@ export default function ChatPage() {
     } catch (err) { alert("送信エラー"); }
   };
 
-  // 日付表示用のフォーマッタ
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return `${date.getMonth() + 1}/${date.getDate()}`;
@@ -135,7 +141,10 @@ export default function ChatPage() {
   );
 
   return (
-    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ 
+      width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', position: 'relative', overflow: 'hidden',
+      opacity: isReady ? 1 : 0, transition: 'opacity 0.2s ease-in' // 位置が決まるまで隠す
+    }}>
       <style>{`
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #800000; borderRadius: 10px; }
@@ -143,7 +152,6 @@ export default function ChatPage() {
         img { -webkit-touch-callout: none; }
       `}</style>
       
-      {/* 設定モーダル */}
       {isModalOpen && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: '80%', maxWidth: '350px', background: '#1a1a1a', padding: '30px', borderRadius: '25px', border: '2px solid #800000', textAlign: 'center' }}>
@@ -172,14 +180,13 @@ export default function ChatPage() {
         </div>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+      <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
         {messages.map((m, i) => {
           const isMe = m.user_id === user.id;
           const showDate = i === 0 || formatDate(messages[i-1].created_at) !== formatDate(m.created_at);
           
           return (
             <div key={m.id}>
-              {/* 【日付表示】日付が変わるタイミングで挿入 */}
               {showDate && (
                 <div style={{ textAlign: 'center', margin: '20px 0', fontSize: '0.7rem', color: '#666', fontFamily: 'serif' }}>
                   ― {formatDate(m.created_at)} ―
@@ -193,7 +200,7 @@ export default function ChatPage() {
                     borderRadius: isMe ? '20px 20px 0 20px' : '20px 20px 20px 0', 
                     maxWidth: '80%', color: '#fff', 
                     border: isMe ? 'none' : '2px solid #D4AF37', 
-                    whiteSpace: 'pre-wrap', // 【改行反映】
+                    whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                     textAlign: 'left'
                   }}>
@@ -215,7 +222,6 @@ export default function ChatPage() {
         <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           <CameraIcon /><input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
         </label>
-        {/* 【入力欄】Enterで改行、SENDボタンで送信に固定 */}
         <textarea 
           ref={textareaRef}
           value={inputText} 
