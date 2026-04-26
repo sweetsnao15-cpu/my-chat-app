@@ -4,18 +4,36 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-const GuestAvatar = ({ profile, size = '40px', fontSize = '0.8rem' }) => {
-  if (profile?.avatar_url) {
-    return <img src={profile.avatar_url} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', border: '1px solid #D4AF37', pointerEvents: 'none' }} alt="" />;
-  }
+// アバターと未読バッジのコンポーネント
+const GuestAvatarWithBadge = ({ profile, unreadCount, size = '50px', isSelected }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "G";
+  
   return (
-    <div style={{
-      width: size, height: size, borderRadius: '50%',
-      background: 'linear-gradient(135deg, #D4AF37 0%, #B69121 100%)',
-      color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontWeight: 'bold', fontSize: fontSize, border: '1px solid #D4AF37', flexShrink: 0
-    }}>{initial}</div>
+    <div style={{ position: 'relative', width: size, height: size, opacity: isSelected ? 1 : 0.5, transition: '0.2s' }}>
+      {profile?.avatar_url ? (
+        <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '1px solid #D4AF37' }} alt="" />
+      ) : (
+        <div style={{
+          width: '100%', height: '100%', borderRadius: '50%',
+          background: 'linear-gradient(135deg, #D4AF37 0%, #B69121 100%)',
+          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontWeight: 'bold', fontSize: '1.1rem', border: '1px solid #D4AF37'
+        }}>{initial}</div>
+      )}
+      
+      {/* 未読バッジ：おしゃれな赤丸 */}
+      {unreadCount > 0 && (
+        <div style={{
+          position: 'absolute', top: '-2px', right: '-2px',
+          background: '#ff4d4d', color: '#fff', fontSize: '10px', fontWeight: 'bold',
+          minWidth: '18px', height: '18px', borderRadius: '9px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: '2px solid #000', padding: '0 4px', boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+        }}>
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -26,7 +44,6 @@ export default function AdminPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [user, setUser] = useState(null);
-  const scrollRef = useRef(null);
 
   const fetchGuests = useCallback(async () => {
     const { data: profiles } = await supabase.from('profiles').select('*');
@@ -34,9 +51,19 @@ export default function AdminPage() {
   }, []);
 
   const fetchMessages = useCallback(async () => {
-    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
+    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: false });
     if (data) setMessages(data);
   }, []);
+
+  // 既読にする処理
+  const markAsRead = async (guestId) => {
+    if (!guestId) return;
+    await supabase.from('messages')
+      .update({ is_read: true })
+      .eq('user_id', guestId)
+      .eq('receiver_id', ADMIN_ID)
+      .eq('is_read', false);
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
@@ -46,21 +73,21 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
+  // DIRECTでゲストを選んだら既読にする
+  useEffect(() => {
+    if (viewMode === 'DIRECT' && selectedGuestId) {
+      markAsRead(selectedGuestId);
+    }
+  }, [selectedGuestId, viewMode, messages]);
+
+  // ゲストを最新メッセージ順に並び替え
   const sortedGuests = useMemo(() => {
     return [...guests].sort((a, b) => {
-      const lastMsgA = [...messages].reverse().find(m => m.user_id === a.id || m.receiver_id === a.id);
-      const lastMsgB = [...messages].reverse().find(m => m.user_id === b.id || m.receiver_id === b.id);
-      const timeA = lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0;
-      const timeB = lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0;
-      return timeB - timeA;
+      const lastMsgA = messages.find(m => m.user_id === a.id || m.receiver_id === a.id);
+      const lastMsgB = messages.find(m => m.user_id === b.id || m.receiver_id === b.id);
+      return (lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0) - (lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0);
     });
   }, [guests, messages]);
-
-  useEffect(() => {
-    // ゲスト選択時は behavior: "auto" で瞬時に最新へ
-    // それ以外（メッセージ更新時など）は viewMode に応じて調整
-    scrollRef.current?.scrollIntoView({ behavior: "auto" });
-  }, [messages, viewMode, selectedGuestId]);
 
   const handleSendGlobal = async () => {
     const text = inputText.trim();
@@ -73,24 +100,21 @@ export default function AdminPage() {
   };
 
   const getDisplayMessages = () => {
+    let filtered = messages;
     if (viewMode === 'DIRECT') {
-      return messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId));
+      filtered = messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId));
+    } else {
+      const displayed = [];
+      const seen = new Set();
+      [...messages].reverse().forEach(m => {
+        if (m.user_id === ADMIN_ID) {
+          const key = `${m.content}_${Math.floor(new Date(m.created_at).getTime() / 1000)}`;
+          if (!seen.has(key)) { displayed.push(m); seen.add(key); }
+        } else { displayed.push(m); }
+      });
+      return displayed; // Globalはここですでに正しい順序
     }
-    const displayed = [];
-    const seenTimestamps = new Set();
-    messages.forEach(m => {
-      if (m.user_id === ADMIN_ID) {
-        const ts = new Date(m.created_at).getTime();
-        const key = `${m.content}_${Math.floor(ts / 1000)}`;
-        if (!seenTimestamps.has(key)) {
-          displayed.push(m);
-          seenTimestamps.add(key);
-        }
-      } else {
-        displayed.push(m);
-      }
-    });
-    return displayed;
+    return [...filtered].reverse(); // flex-reverse用に古い順に戻す
   };
 
   return (
@@ -112,49 +136,55 @@ export default function AdminPage() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {viewMode === 'DIRECT' && (
           <div style={{ width: '100px', borderRight: '1px solid #333', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
-            {sortedGuests.map(g => (
-              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', textAlign: 'center', width: '100%', opacity: selectedGuestId === g.id ? 1 : 0.4 }}>
-                <div style={{ display: 'flex', justifyContent: 'center' }}>
-                  <GuestAvatar profile={g} size="50px" />
-                </div>
-                <div style={{ fontSize: '0.6rem', color: '#D4AF37', marginTop: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 5px' }}>
-                  {g.username || 'No Name'}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-            {getDisplayMessages().map(m => {
-              const isMe = m.user_id === ADMIN_ID;
-              const guest = guests.find(g => g.id === (isMe ? m.receiver_id : m.user_id));
+            {sortedGuests.map(g => {
+              const unreadCount = messages.filter(m => m.user_id === g.id && m.receiver_id === ADMIN_ID && !m.is_read).length;
               return (
-                <div key={m.id} style={{ marginBottom: '20px', textAlign: isMe ? 'right' : 'left' }}>
-                  <div style={{ display: 'flex', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
-                    {!isMe && <GuestAvatar profile={guest} />}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                      {!isMe && viewMode === 'GLOBAL' && <div style={{ fontSize: '0.7rem', color: '#D4AF37', marginBottom: '4px' }}>{guest?.username}</div>}
-                      <div style={{ 
-                        padding: m.is_image ? '5px' : '10px 15px', background: isMe ? '#500000' : '#1a1a1a', 
-                        borderRadius: isMe ? '15px 15px 0 15px' : '15px 15px 15px 0', border: isMe ? 'none' : '1px solid #D4AF37', maxWidth: '320px',
-                        whiteSpace: 'pre-wrap', // 【修正】改行を反映
-                        wordBreak: 'break-word',
-                        textAlign: 'left'
-                      }}>
-                        {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" /> : m.content}
-                      </div>
-                      <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '4px' }}>
-                        {isMe && m.is_read && viewMode === 'DIRECT' && <span style={{ color: '#D4AF37', marginRight: '5px' }}>既読</span>}
-                        {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                      </div>
-                    </div>
+                <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', textAlign: 'center', width: '100%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <GuestAvatarWithBadge profile={g} unreadCount={unreadCount} isSelected={selectedGuestId === g.id} />
+                  </div>
+                  <div style={{ fontSize: '0.6rem', color: '#D4AF37', marginTop: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 5px' }}>
+                    {g.username || 'No Name'}
                   </div>
                 </div>
               );
             })}
-            <div ref={scrollRef} />
+          </div>
+        )}
+
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* 【修正】column-reverse により、最初から一番下に張り付きます */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column-reverse' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {getDisplayMessages().map(m => {
+                const isMe = m.user_id === ADMIN_ID;
+                const guest = guests.find(g => g.id === (isMe ? m.receiver_id : m.user_id));
+                return (
+                  <div key={m.id} style={{ marginBottom: '20px', textAlign: isMe ? 'right' : 'left' }}>
+                    <div style={{ display: 'flex', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
+                      {!isMe && (
+                         <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', border: '1px solid #D4AF37', flexShrink: 0 }}>
+                           <img src={guest?.avatar_url || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => e.target.style.display='none'} />
+                         </div>
+                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                        {!isMe && viewMode === 'GLOBAL' && <div style={{ fontSize: '0.7rem', color: '#D4AF37', marginBottom: '4px' }}>{guest?.username}</div>}
+                        <div style={{ 
+                          padding: m.is_image ? '5px' : '10px 15px', background: isMe ? '#500000' : '#1a1a1a', 
+                          borderRadius: isMe ? '15px 15px 0 15px' : '15px 15px 15px 0', border: isMe ? 'none' : '1px solid #D4AF37', maxWidth: '320px',
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'left'
+                        }}>
+                          {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
+                        </div>
+                        <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '4px' }}>
+                          {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {viewMode === 'GLOBAL' && (
