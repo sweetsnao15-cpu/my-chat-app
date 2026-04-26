@@ -4,32 +4,18 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-// アバターと未読バッジのコンポーネント
+// アバターと未読バッジ
 const GuestAvatarWithBadge = ({ profile, unreadCount, size = '50px', isSelected }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "G";
-  
   return (
     <div style={{ position: 'relative', width: size, height: size, opacity: isSelected ? 1 : 0.5, transition: '0.2s' }}>
       {profile?.avatar_url ? (
         <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '1px solid #D4AF37' }} alt="" />
       ) : (
-        <div style={{
-          width: '100%', height: '100%', borderRadius: '50%',
-          background: 'linear-gradient(135deg, #D4AF37 0%, #B69121 100%)',
-          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontWeight: 'bold', fontSize: '1.1rem', border: '1px solid #D4AF37'
-        }}>{initial}</div>
+        <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'linear-gradient(135deg, #D4AF37 0%, #B69121 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.1rem', border: '1px solid #D4AF37' }}>{initial}</div>
       )}
-      
-      {/* 未読バッジ：おしゃれな赤丸 */}
       {unreadCount > 0 && (
-        <div style={{
-          position: 'absolute', top: '-2px', right: '-2px',
-          background: '#ff4d4d', color: '#fff', fontSize: '10px', fontWeight: 'bold',
-          minWidth: '18px', height: '18px', borderRadius: '9px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: '2px solid #000', padding: '0 4px', boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
-        }}>
+        <div style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#ff4d4d', color: '#fff', fontSize: '10px', fontWeight: 'bold', minWidth: '18px', height: '18px', borderRadius: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #000', padding: '0 4px' }}>
           {unreadCount > 99 ? '99+' : unreadCount}
         </div>
       )}
@@ -44,6 +30,7 @@ export default function AdminPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [user, setUser] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null); // 操作メニュー用
 
   const fetchGuests = useCallback(async () => {
     const { data: profiles } = await supabase.from('profiles').select('*');
@@ -55,16 +42,6 @@ export default function AdminPage() {
     if (data) setMessages(data);
   }, []);
 
-  // 既読にする処理
-  const markAsRead = async (guestId) => {
-    if (!guestId) return;
-    await supabase.from('messages')
-      .update({ is_read: true })
-      .eq('user_id', guestId)
-      .eq('receiver_id', ADMIN_ID)
-      .eq('is_read', false);
-  };
-
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
     fetchGuests();
@@ -73,19 +50,17 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
-  // DIRECTでゲストを選んだら既読にする
   useEffect(() => {
     if (viewMode === 'DIRECT' && selectedGuestId) {
-      markAsRead(selectedGuestId);
+      supabase.from('messages').update({ is_read: true }).eq('user_id', selectedGuestId).eq('receiver_id', ADMIN_ID).eq('is_read', false).then();
     }
   }, [selectedGuestId, viewMode, messages]);
 
-  // ゲストを最新メッセージ順に並び替え
   const sortedGuests = useMemo(() => {
     return [...guests].sort((a, b) => {
-      const lastMsgA = messages.find(m => m.user_id === a.id || m.receiver_id === a.id);
-      const lastMsgB = messages.find(m => m.user_id === b.id || m.receiver_id === b.id);
-      return (lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0) - (lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0);
+      const lastA = messages.find(m => m.user_id === a.id || m.receiver_id === a.id);
+      const lastB = messages.find(m => m.user_id === b.id || m.receiver_id === b.id);
+      return (lastB ? new Date(lastB.created_at).getTime() : 0) - (lastA ? new Date(lastA.created_at).getTime() : 0);
     });
   }, [guests, messages]);
 
@@ -93,10 +68,34 @@ export default function AdminPage() {
     const text = inputText.trim();
     if (!text || !user) return;
     setInputText('');
-    const bulkMessages = guests.map(g => ({
-      content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: false, is_read: false
-    }));
-    await supabase.from('messages').insert(bulkMessages);
+    const bulk = guests.map(g => ({ content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: false, is_read: false }));
+    await supabase.from('messages').insert(bulk);
+  };
+
+  // メニュー表示
+  const openMenu = (e, m) => {
+    e.preventDefault();
+    const x = e.clientX || (e.touches && e.touches[0].clientX);
+    const y = e.clientY || (e.touches && e.touches[0].clientY);
+    setContextMenu({ x, y, message: m });
+  };
+
+  const deleteMessage = async () => {
+    if (!contextMenu) return;
+    // 一斉送信の場合は同じ内容・同じ時間のものを一括削除
+    if (viewMode === 'GLOBAL' && contextMenu.message.user_id === ADMIN_ID) {
+      const ts = Math.floor(new Date(contextMenu.message.created_at).getTime() / 1000);
+      await supabase.from('messages').delete().eq('user_id', ADMIN_ID).eq('content', contextMenu.message.content);
+    } else {
+      await supabase.from('messages').delete().eq('id', contextMenu.message.id);
+    }
+    setContextMenu(null);
+  };
+
+  const copyMessage = () => {
+    if (!contextMenu) return;
+    navigator.clipboard.writeText(contextMenu.message.content);
+    setContextMenu(null);
   };
 
   const getDisplayMessages = () => {
@@ -112,40 +111,52 @@ export default function AdminPage() {
           if (!seen.has(key)) { displayed.push(m); seen.add(key); }
         } else { displayed.push(m); }
       });
-      return displayed; // Globalはここですでに正しい順序
+      return displayed;
     }
-    return [...filtered].reverse(); // flex-reverse用に古い順に戻す
+    return [...filtered].reverse();
   };
 
   return (
-    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden' }}>
+    <div 
+      onClick={() => setContextMenu(null)}
+      style={{ 
+        width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden',
+        userSelect: 'none', WebkitUserSelect: 'none' // 青い選択を防止
+      }}
+    >
       <style>{`
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-thumb { background: #800000; border-radius: 10px; }
+        * { -webkit-tap-highlight-color: transparent; }
         img { -webkit-touch-callout: none; pointer-events: none; }
       `}</style>
+
+      {/* ポップアップメニュー */}
+      {contextMenu && (
+        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: Math.min(contextMenu.x, 200), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+          <div onClick={copyMessage} style={{ padding: '12px 20px', fontSize: '0.9rem', borderBottom: '1px solid #333', cursor: 'pointer' }}>コピー</div>
+          <div onClick={deleteMessage} style={{ padding: '12px 20px', fontSize: '0.9rem', color: '#ff4d4d', cursor: 'pointer' }}>送信取消</div>
+        </div>
+      )}
 
       <header style={{ padding: '20px', background: '#800000', borderBottom: '2px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
         <h1 style={{ fontSize: '1.8rem', fontFamily: 'serif', fontStyle: 'italic', margin: 0 }}>for VAU - HOST</h1>
         <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '20px' }}>
-          <button onClick={() => setViewMode('GLOBAL')} style={{ background: viewMode === 'GLOBAL' ? '#D4AF37' : 'transparent', color: viewMode === 'GLOBAL' ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px', cursor: 'pointer' }}>GLOBAL</button>
-          <button onClick={() => setViewMode('DIRECT')} style={{ background: viewMode === 'DIRECT' ? '#D4AF37' : 'transparent', color: viewMode === 'DIRECT' ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px', cursor: 'pointer' }}>DIRECT</button>
+          {['GLOBAL', 'DIRECT'].map(mode => (
+            <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>{mode}</button>
+          ))}
         </div>
       </header>
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {viewMode === 'DIRECT' && (
-          <div style={{ width: '100px', borderRight: '1px solid #333', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
+          <div style={{ width: '90px', borderRight: '1px solid #333', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
             {sortedGuests.map(g => {
-              const unreadCount = messages.filter(m => m.user_id === g.id && m.receiver_id === ADMIN_ID && !m.is_read).length;
+              const unread = messages.filter(m => m.user_id === g.id && m.receiver_id === ADMIN_ID && !m.is_read).length;
               return (
                 <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', textAlign: 'center', width: '100%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <GuestAvatarWithBadge profile={g} unreadCount={unreadCount} isSelected={selectedGuestId === g.id} />
-                  </div>
-                  <div style={{ fontSize: '0.6rem', color: '#D4AF37', marginTop: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 5px' }}>
-                    {g.username || 'No Name'}
-                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}><GuestAvatarWithBadge profile={g} unreadCount={unread} isSelected={selectedGuestId === g.id} /></div>
+                  <div style={{ fontSize: '0.6rem', color: '#D4AF37', marginTop: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 5px' }}>{g.username || 'Guest'}</div>
                 </div>
               );
             })}
@@ -153,32 +164,28 @@ export default function AdminPage() {
         )}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* 【修正】column-reverse により、最初から一番下に張り付きます */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column-reverse' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {getDisplayMessages().map(m => {
                 const isMe = m.user_id === ADMIN_ID;
                 const guest = guests.find(g => g.id === (isMe ? m.receiver_id : m.user_id));
                 return (
-                  <div key={m.id} style={{ marginBottom: '20px', textAlign: isMe ? 'right' : 'left' }}>
-                    <div style={{ display: 'flex', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
-                      {!isMe && (
-                         <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', border: '1px solid #D4AF37', flexShrink: 0 }}>
-                           <img src={guest?.avatar_url || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => e.target.style.display='none'} />
-                         </div>
-                      )}
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                        {!isMe && viewMode === 'GLOBAL' && <div style={{ fontSize: '0.7rem', color: '#D4AF37', marginBottom: '4px' }}>{guest?.username}</div>}
-                        <div style={{ 
-                          padding: m.is_image ? '5px' : '10px 15px', background: isMe ? '#500000' : '#1a1a1a', 
-                          borderRadius: isMe ? '15px 15px 0 15px' : '15px 15px 15px 0', border: isMe ? 'none' : '1px solid #D4AF37', maxWidth: '320px',
-                          whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'left'
-                        }}>
-                          {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
-                        </div>
-                        <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '4px' }}>
-                          {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                        </div>
+                  <div key={m.id} onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => {
+                    const timer = setTimeout(() => openMenu(e, m), 600);
+                    e.target.ontouchend = () => clearTimeout(timer);
+                  }} style={{ marginBottom: '20px', textAlign: isMe ? 'right' : 'left' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                      {/* DIRECT時はアイコン非表示 / GLOBAL時は名前のみ表示 */}
+                      {!isMe && viewMode === 'GLOBAL' && <div style={{ fontSize: '0.7rem', color: '#D4AF37', marginBottom: '4px' }}>{guest?.username}</div>}
+                      <div style={{ 
+                        padding: m.is_image ? '5px' : '10px 15px', background: isMe ? '#500000' : '#1a1a1a', 
+                        borderRadius: isMe ? '15px 15px 0 15px' : '15px 15px 15px 0', border: isMe ? 'none' : '1px solid #D4AF37', maxWidth: '85%',
+                        whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'left', fontSize: '0.95rem'
+                      }}>
+                        {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
+                      </div>
+                      <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '4px' }}>
+                        {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                       </div>
                     </div>
                   </div>
@@ -189,16 +196,8 @@ export default function AdminPage() {
 
           {viewMode === 'GLOBAL' && (
             <div style={{ padding: '15px', background: '#800000', display: 'flex', gap: '10px', borderTop: '2px solid #D4AF37', flexShrink: 0 }}>
-              <textarea 
-                value={inputText} 
-                onChange={e => setInputText(e.target.value)} 
-                placeholder="全ゲストへ一斉送信..."
-                style={{ flex: 1, background: '#800000', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px', padding: '10px 15px', outline: 'none', resize: 'none', height: '42px', fontSize: '16px' }}
-              />
-              <button 
-                onClick={handleSendGlobal}
-                style={{ background: '#000', color: '#D4AF37', padding: '0 20px', borderRadius: '20px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', fontSize: '1.1rem', border: 'none', cursor: 'pointer' }}
-              >SEND</button>
+              <textarea value={inputText} onChange={e => setInputText(e.target.value)} placeholder="一斉送信..." style={{ flex: 1, background: '#800000', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px', padding: '10px 15px', outline: 'none', resize: 'none', height: '42px', fontSize: '16px' }} />
+              <button onClick={handleSendGlobal} style={{ background: '#000', color: '#D4AF37', padding: '0 20px', borderRadius: '20px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', border: 'none', cursor: 'pointer' }}>SEND</button>
             </div>
           )}
         </div>
