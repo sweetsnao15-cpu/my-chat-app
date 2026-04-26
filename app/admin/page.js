@@ -4,7 +4,6 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-// アバターとバッジのコンポーネント（変更なし）
 const GuestAvatarWithBadge = ({ profile, unreadCount, size = '50px', isSelected }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "G";
   return (
@@ -32,7 +31,6 @@ export default function AdminPage() {
   const [user, setUser] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
 
-  // データ取得
   const fetchGuests = useCallback(async () => {
     const { data: profiles } = await supabase.from('profiles').select('*');
     if (profiles) setGuests(profiles.filter(p => p.id !== ADMIN_ID));
@@ -43,24 +41,21 @@ export default function AdminPage() {
     if (data) setMessages(data);
   }, []);
 
-  // 【修正】既読処理：DB更新後、即座にローカル変数を書き換えてバッジを消す
+  // 【修正】既読処理をより強力に
   const markAsRead = useCallback(async (guestId) => {
     if (!guestId) return;
     
-    // DB上の対象を既読に
+    // 1. まずDBを更新
     const { error } = await supabase.from('messages')
       .update({ is_read: true })
       .eq('user_id', guestId)
-      .eq('receiver_id', ADMIN_ID)
-      .eq('is_read', false);
+      .eq('receiver_id', ADMIN_ID); // is_readの条件を外して確実に上書き
     
     if (!error) {
-      // ローカルステート内の該当メッセージも既読(true)に書き換える
-      setMessages(prev => prev.map(m => 
-        (m.user_id === guestId && m.receiver_id === ADMIN_ID) ? { ...m, is_read: true } : m
-      ));
+      // 2. 更新が成功したら、即座にメッセージリストを再取得（これが最も確実です）
+      await fetchMessages();
     }
-  }, []);
+  }, [fetchMessages]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
@@ -72,12 +67,11 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
-  // ダイレクト選択時に即既読
   useEffect(() => {
     if (viewMode === 'DIRECT' && selectedGuestId) {
       markAsRead(selectedGuestId);
     }
-  }, [selectedGuestId, viewMode, messages, markAsRead]);
+  }, [selectedGuestId, viewMode, markAsRead]); // 依存関係を整理
 
   const sortedGuests = useMemo(() => {
     return [...guests].sort((a, b) => {
@@ -98,7 +92,7 @@ export default function AdminPage() {
   };
 
   const openMenu = (e, m) => {
-    if (viewMode !== 'GLOBAL') return; // GLOBALのみ
+    if (viewMode !== 'GLOBAL') return;
     e.preventDefault();
     const x = e.clientX || (e.touches && e.touches[0].clientX);
     const y = e.clientY || (e.touches && e.touches[0].clientY);
@@ -161,11 +155,11 @@ export default function AdminPage() {
         {viewMode === 'DIRECT' && (
           <div style={{ width: '90px', borderRight: '1px solid #333', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
             {sortedGuests.map(g => {
-              // 【重要】正確な未読カウント
+              // ここでフィルタリングされるメッセージを常に最新のmessagesから計算
               const unread = messages.filter(m => 
-                m.user_id === g.id &&           // 送信者がこのゲスト
-                m.receiver_id === ADMIN_ID &&   // 受信者が自分（ホスト）
-                m.is_read === false             // 未読状態
+                m.user_id === g.id && 
+                m.receiver_id === ADMIN_ID && 
+                m.is_read === false
               ).length;
 
               return (
