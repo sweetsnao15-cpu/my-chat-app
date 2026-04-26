@@ -4,7 +4,6 @@ import { supabase } from '../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-// カメラアイコンコンポーネント
 const CameraIcon = () => (
   <svg width="22" height="20" viewBox="0 0 24 22" fill="none" stroke="#D4AF37" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
@@ -12,7 +11,6 @@ const CameraIcon = () => (
   </svg>
 );
 
-// 【エラーの原因】アバター表示コンポーネント
 const InitialAvatar = ({ name, size = '48px', fontSize = '1.4rem' }) => {
   const initial = name && name.trim() ? Array.from(name.trim())[0].toUpperCase() : "V";
   return (
@@ -41,13 +39,11 @@ export default function ChatPage() {
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // プロフィール取得
   const loadProfile = useCallback(async (id) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
     if (data) setProfile({ username: data.username || '', avatar_url: data.avatar_url || '' });
   }, []);
 
-  // メッセージ取得
   const fetchMessages = useCallback(async (uid) => {
     if (!uid) return;
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
@@ -81,14 +77,20 @@ export default function ChatPage() {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" }); 
   }, [messages]);
 
-  // 送信処理
   const handleSend = async (imgUrl = null) => {
     if ((!inputText.trim() && !imgUrl) || !user) return;
     const contentBody = imgUrl || inputText;
     if (!imgUrl) setInputText('');
-    await supabase.from('messages').insert([{ 
-      content: contentBody, user_id: user.id, receiver_id: ADMIN_ID, is_image: !!imgUrl, is_read: false 
+    
+    const { error } = await supabase.from('messages').insert([{ 
+      content: contentBody, 
+      user_id: user.id, 
+      receiver_id: ADMIN_ID, 
+      is_image: !!imgUrl, 
+      is_read: false 
     }]);
+    
+    if (error) console.error("Send Error:", error);
   };
 
   const handleFileUpload = async (e) => {
@@ -100,14 +102,20 @@ export default function ChatPage() {
     handleSend(publicUrl);
   };
 
-  // 長押しメニュー
   const handleTouchStart = (e, m) => {
     longPressTimer.current = setTimeout(() => {
-      const touch = e.touches[0];
+      const touch = e.touches ? e.touches[0] : e;
       setContextMenu({ x: touch.clientX, y: touch.clientY, message: m });
     }, 600);
   };
   const handleTouchEnd = () => clearTimeout(longPressTimer.current);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "42px";
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 150) + "px";
+    }
+  }, [inputText]);
 
   if (loading) return <div style={{ background: '#000', height: '100dvh' }} />;
 
@@ -129,7 +137,6 @@ export default function ChatPage() {
   return (
     <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', position: 'relative' }}>
       
-      {/* 長押しメニュー */}
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 80, left: Math.min(contextMenu.x, window.innerWidth - 160), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '12px', zIndex: 1000, width: '150px' }}>
           <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '12px', borderBottom: '1px solid #333' }}>コピー</div>
@@ -139,7 +146,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* 設定モーダル */}
       {isModalOpen && (
         <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: '80%', maxWidth: '300px', background: '#1a1a1a', padding: '30px', borderRadius: '25px', border: '2px solid #800000', textAlign: 'center' }}>
@@ -196,8 +202,19 @@ export default function ChatPage() {
         <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <CameraIcon /><input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
         </label>
-        <textarea value={inputText} onChange={e => setInputText(e.target.value)} placeholder="Message..." style={{ flex: 1, padding: '10px 15px', borderRadius: '20px', border: '1px solid #333', background: '#800000', color: '#fff', fontSize: '16px', outline: 'none', resize: 'none', height: '42px' }} />
-        <button onClick={() => handleSend()} style={{ background: '#000', color: '#D4AF37', width: '70px', height: '42px', borderRadius: '20px', fontWeight: 'bold' }}>SEND</button>
+        {/* 入力欄の縁を背景と同じ #800000 に修正 */}
+        <textarea 
+          ref={textareaRef}
+          value={inputText} 
+          onChange={e => setInputText(e.target.value)} 
+          placeholder="Message..." 
+          style={{ flex: 1, padding: '10px 15px', borderRadius: '20px', border: '1px solid #800000', background: '#800000', color: '#fff', fontSize: '16px', outline: 'none', resize: 'none', height: '42px' }} 
+        />
+        {/* SENDボタンの書体を for VAU と統一 */}
+        <button 
+          onClick={() => handleSend()} 
+          style={{ background: '#000', color: '#D4AF37', width: '70px', height: '42px', borderRadius: '20px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', fontSize: '1.1rem' }}
+        >SEND</button>
       </div>
     </div>
   );
