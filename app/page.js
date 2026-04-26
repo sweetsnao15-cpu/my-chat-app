@@ -73,21 +73,52 @@ export default function ChatPage() {
 
   useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // 【修正】送信ロジックを整理
   const handleSend = async (imgUrl = null) => {
     const text = inputText.trim();
     if (!text && !imgUrl) return;
     if (!user) return;
+
     if (!imgUrl) setInputText('');
-    await supabase.from('messages').insert([{ content: imgUrl || text, user_id: user.id, receiver_id: ADMIN_ID, is_image: !!imgUrl }]);
+
+    const { error } = await supabase.from('messages').insert([{ 
+      content: imgUrl || text, 
+      user_id: user.id, 
+      receiver_id: ADMIN_ID, 
+      is_image: !!imgUrl 
+    }]);
+
+    if (error) console.error("Send error:", error.message);
   };
 
+  // 【復旧】画像アップロード処理
   const handleFileUpload = async (e) => {
-    const f = e.target.files[0];
-    if (!f || !user) return;
-    const path = `chats/${user.id}/${Date.now()}`;
-    await supabase.storage.from('chat-images').upload(path, f);
-    const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(path);
-    handleSend(publicUrl);
+    const file = e.target.files[0];
+    if (!file || !user) return;
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
+
+      // Storageの「chat-images」バケットへアップロード
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 公開URLを取得
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(filePath);
+
+      // メッセージとして送信
+      await handleSend(publicUrl);
+    } catch (error) {
+      console.error("Upload error:", error.message);
+      alert("画像の送信に失敗しました");
+    }
   };
 
   const handleTouchStart = (e, m) => {
@@ -131,10 +162,10 @@ export default function ChatPage() {
       style={{ 
         width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
         background: '#000', color: '#fff', position: 'relative',
-        userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' // 【追加】全体での選択・プレビュー無効化
+        userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'
       }}
     >
-      
+      {/* コンテキストメニュー */}
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 120, left: Math.min(contextMenu.x, window.innerWidth - 180), background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '15px', zIndex: 1000, width: '160px', overflow: 'hidden' }}>
           <div onClick={() => { navigator.clipboard.writeText(contextMenu.message.content); setContextMenu(null); }} style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '0.9rem' }}>コピー</div>
@@ -145,30 +176,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {isModalOpen && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: '80%', maxWidth: '300px', background: '#1a1a1a', padding: '30px', borderRadius: '25px', border: '2px solid #800000', textAlign: 'center' }}>
-            <label style={{ display: 'block', width: '80px', height: '80px', margin: '0 auto 20px', borderRadius: '50%', border: '2px solid #D4AF37', overflow: 'hidden' }}>
-              {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <InitialAvatar name={profile.username} size="80px" fontSize="2rem" />}
-              <input type="file" accept="image/*" onChange={async (e)=>{
-                const f=e.target.files[0]; if(!f)return;
-                const p=`avatars/${user.id}`;
-                await supabase.storage.from('chat-images').upload(p,f,{upsert:true});
-                const {data:{publicUrl:u}}=supabase.storage.from('chat-images').getPublicUrl(p);
-                setProfile({...profile, avatar_url:u});
-              }} style={{ display: 'none' }} />
-            </label>
-            <input 
-              value={profile.username} 
-              onChange={e => setProfile({...profile, username: e.target.value})} 
-              style={{ width: '100%', padding: '10px', background: '#000', color: '#fff', border: '1px solid #333', marginBottom: '20px', borderRadius: '8px', userSelect: 'text', WebkitUserSelect: 'text' }} // 【修正】入力欄は選択可能に
-            />
-            <button onClick={async() => { await supabase.from('profiles').upsert({ id: user.id, username: profile.username, avatar_url: profile.avatar_url }); setIsModalOpen(false); }} style={{ width: '100%', padding: '10px', background: '#800000', color: '#fff', border: 'none', marginBottom: '10px', borderRadius: '8px' }}>SAVE</button>
-            <button onClick={async () => { await supabase.auth.signOut(); setIsModalOpen(false); }} style={{ width: '100%', padding: '10px', background: '#333', color: '#fff', border: 'none', borderRadius: '8px' }}>LOG OUT</button>
-          </div>
-        </div>
-      )}
-
+      {/* ヘッダー */}
       <header style={{ padding: '25px 25px 10px 45px', background: '#800000', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #D4AF37' }}>
         <h1 style={{ fontSize: '2.4rem', fontFamily: 'serif', fontStyle: 'italic', margin: 0 }}>for VAU</h1>
         <div onClick={() => setIsModalOpen(true)} style={{ cursor: 'pointer' }}>
@@ -176,8 +184,9 @@ export default function ChatPage() {
         </div>
       </header>
 
+      {/* メッセージ一覧 */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-        {messages.map((m, i) => {
+        {messages.map((m) => {
           const isMe = m.user_id === user.id;
           return (
             <div key={m.id} onTouchStart={(e) => handleTouchStart(e, m)} onTouchEnd={handleTouchEnd} style={{ marginBottom: '20px', textAlign: isMe ? 'right' : 'left' }}>
@@ -188,7 +197,7 @@ export default function ChatPage() {
                   maxWidth: '85%', color: '#fff', border: isMe ? 'none' : '2px solid #D4AF37',
                   whiteSpace: 'pre-wrap', width: 'fit-content', textAlign: 'left'
                 }}>
-                  {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', pointerEvents: 'none' }} /> : m.content}
+                  {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', pointerEvents: 'none', display: 'block' }} /> : m.content}
                 </div>
                 <div style={{ fontSize: '0.6rem', color: '#666', marginTop: '5px' }}>
                   {new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
@@ -200,9 +209,11 @@ export default function ChatPage() {
         <div ref={scrollRef} />
       </div>
 
+      {/* フッター（入力欄・カメラ・送信ボタン） */}
       <div style={{ padding: '15px 20px', background: '#800000', display: 'flex', gap: '10px', alignItems: 'flex-end', borderTop: '2px solid #D4AF37', paddingBottom: 'calc(15px + env(safe-area-inset-bottom))' }}>
-        <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <CameraIcon /><input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
+        <label style={{ background: '#000', width: '42px', height: '42px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <CameraIcon />
+          <input type="file" accept="image/*" onChange={handleFileUpload} style={{ display: 'none' }} />
         </label>
         <textarea 
           ref={textareaRef}
@@ -212,7 +223,7 @@ export default function ChatPage() {
           style={{ 
             flex: 1, padding: '10px 15px', borderRadius: '22px', border: '1px solid rgba(255,255,255,0.3)', 
             background: '#800000', color: '#fff', fontSize: '16px', outline: 'none', resize: 'none', height: '42px',
-            userSelect: 'text', WebkitUserSelect: 'text' // 【修正】入力欄は選択可能に
+            userSelect: 'text', WebkitUserSelect: 'text'
           }} 
         />
         <button 
