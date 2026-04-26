@@ -68,9 +68,7 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [selectedUserId, fetchMessages, fetchAllMessages, fetchUsers]);
 
-  // 【修正】パッと最新を表示させるためのスクロール制御
   useEffect(() => {
-    // わずかな遅延を入れることで要素のレンダリング完了を待つ
     const timer = setTimeout(() => {
       if (view === 'GLOBAL') {
         globalScrollRef.current?.scrollIntoView({ behavior: "instant", block: "end" });
@@ -81,11 +79,16 @@ export default function AdminPage() {
     return () => clearTimeout(timer);
   }, [messages, allMessages, view, selectedUserId]);
 
+  // 【一斉送信機能の復元】
   const handleGlobalSend = async () => {
-    if (!globalText.trim() || !confirm("全ゲストに一斉送信しますか？")) return;
+    if (!globalText.trim()) return;
+    if (!confirm(`${users.length} 名の全ゲストにメッセージを送信しますか？`)) return;
+
     try {
+      // 最新のユーザー一覧を再取得して確実に全員に送る
       const { data: currentUsers } = await supabase.from('profiles').select('id');
-      if (!currentUsers) return;
+      if (!currentUsers || currentUsers.length === 0) return;
+
       const sendPromises = currentUsers.map(u => 
         supabase.from('messages').insert([{ 
           content: globalText, 
@@ -95,10 +98,17 @@ export default function AdminPage() {
           is_read: false
         }])
       );
-      await Promise.all(sendPromises);
-      setGlobalText('');
+
+      const results = await Promise.all(sendPromises);
+      const hasError = results.some(r => r.error);
+
+      if (hasError) {
+        alert("一部のメッセージ送信に失敗しました");
+      } else {
+        setGlobalText('');
+      }
     } catch (e) {
-      alert("送信に失敗しました");
+      alert("エラーが発生しました");
     }
   };
 
@@ -131,7 +141,7 @@ export default function AdminPage() {
                   border: isMe ? 'none' : '2px solid #D4AF37',
                   boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
                   wordBreak: 'break-all',
-                  whiteSpace: 'pre-wrap',
+                  whiteSpace: 'pre-wrap', // 改行表示の反映
                   textAlign: 'left'
                 }}>
                   {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '15px', display: 'block' }} alt="" /> : m.content}
@@ -165,15 +175,16 @@ export default function AdminPage() {
               {renderMessageList(allMessages, true)}
               <div ref={globalScrollRef} style={{ height: '1px' }} />
             </div>
+            {/* 一斉送信エリア：改行入力対応 */}
             <div style={{ position: 'fixed', bottom: 0, width: '100%', padding: '10px 20px 20px', background: '#800000', borderTop: '2px solid #D4AF37', zIndex: 10 }}>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
                 <textarea 
                   value={globalText} 
                   onChange={e => setGlobalText(e.target.value)} 
                   placeholder="全員に一斉送信..." 
-                  style={{ flex: 1, padding: '10px 15px', background: '#000', color: '#fff', borderRadius: '15px', border: '1px solid #333', outline: 'none', resize: 'none', height: '40px', fontSize: '14px' }} 
+                  style={{ flex: 1, padding: '10px 15px', background: '#000', color: '#fff', borderRadius: '15px', border: '1px solid #333', outline: 'none', resize: 'none', height: '50px', fontSize: '14px', whiteSpace: 'pre-wrap' }} 
                 />
-                <button onClick={handleGlobalSend} style={{ background: '#000', color: '#D4AF37', border: 'none', height: '40px', padding: '0 20px', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}>SEND</button>
+                <button onClick={handleGlobalSend} style={{ background: '#000', color: '#D4AF37', border: 'none', height: '50px', padding: '0 20px', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }}>SEND</button>
               </div>
             </div>
           </div>
