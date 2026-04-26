@@ -14,10 +14,9 @@ const GuestAvatarWithBadge = ({ profile, unreadCount, size = '50px', isSelected 
       ) : (
         <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'linear-gradient(135deg, #D4AF37 0%, #B69121 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '1.1rem', border: '1px solid #D4AF37' }}>{initial}</div>
       )}
-      {/* 未読がある場合のみバッジを表示 */}
       {unreadCount > 0 && (
         <div style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#ff4d4d', color: '#fff', fontSize: '10px', fontWeight: 'bold', minWidth: '18px', height: '18px', borderRadius: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #000', padding: '0 4px', zIndex: 10 }}>
-          {unreadCount > 99 ? '99+' : unreadCount}
+          {unreadCount}
         </div>
       )}
     </div>
@@ -43,21 +42,17 @@ export default function AdminPage() {
     if (data) setMessages(data);
   }, []);
 
-  // 【既読処理】特定のゲストからの未読メッセージをすべて既読にする
   const markAsRead = useCallback(async (guestId) => {
     if (!guestId) return;
-    const { error } = await supabase.from('messages')
+    await supabase.from('messages')
       .update({ is_read: true })
       .eq('user_id', guestId)
       .eq('receiver_id', ADMIN_ID)
       .eq('is_read', false);
-    
-    if (!error) {
-      // ローカルのステートも即座に更新してバッジを消す
-      setMessages(prev => prev.map(m => 
-        (m.user_id === guestId && m.receiver_id === ADMIN_ID) ? { ...m, is_read: true } : m
-      ));
-    }
+    // ローカルステートを即座に更新してバッジを消す
+    setMessages(prev => prev.map(m => 
+      (m.user_id === guestId && m.receiver_id === ADMIN_ID) ? { ...m, is_read: true } : m
+    ));
   }, []);
 
   useEffect(() => {
@@ -65,24 +60,17 @@ export default function AdminPage() {
     fetchGuests();
     fetchMessages();
 
-    // リアルタイム購読
     const channel = supabase.channel('admin_room')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
-        // 新着メッセージが届いたらリストを更新
-        fetchMessages();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
       .subscribe();
     
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
-  // 【自動既読】DIRECTモードでゲストが選択されている間、そのゲストの新着メッセージを自動で既読にする
+  // DIRECTモードでゲスト選択中のみ自動既読
   useEffect(() => {
     if (viewMode === 'DIRECT' && selectedGuestId) {
-      const hasUnread = messages.some(m => m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID && !m.is_read);
-      if (hasUnread) {
-        markAsRead(selectedGuestId);
-      }
+      markAsRead(selectedGuestId);
     }
   }, [selectedGuestId, viewMode, messages, markAsRead]);
 
@@ -94,20 +82,14 @@ export default function AdminPage() {
     });
   }, [guests, messages]);
 
-  const handleSendDirect = async () => {
-    const text = inputText.trim();
-    if (!text || !user || !selectedGuestId) return;
-    setInputText('');
-    await supabase.from('messages').insert([{
-      content: text, user_id: ADMIN_ID, receiver_id: selectedGuestId, is_image: false, is_read: false
-    }]);
-  };
-
+  // 【回復】常に全ゲストへの一斉送信として機能
   const handleSendGlobal = async () => {
     const text = inputText.trim();
     if (!text || !user) return;
     setInputText('');
-    const bulk = guests.map(g => ({ content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: false, is_read: false }));
+    const bulk = guests.map(g => ({
+      content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: false, is_read: false
+    }));
     await supabase.from('messages').insert(bulk);
   };
 
@@ -120,30 +102,32 @@ export default function AdminPage() {
 
   const deleteMessage = async () => {
     if (!contextMenu) return;
-    if (viewMode === 'GLOBAL' && contextMenu.message.user_id === ADMIN_ID) {
-      await supabase.from('messages').delete().eq('user_id', ADMIN_ID).eq('content', contextMenu.message.content);
-    } else {
-      await supabase.from('messages').delete().eq('id', contextMenu.message.id);
-    }
+    // 一斉送信メッセージの削除（内容と時間で特定）
+    await supabase.from('messages').delete()
+      .eq('user_id', ADMIN_ID)
+      .eq('content', contextMenu.message.content);
     setContextMenu(null);
   };
 
   const getDisplayMessages = () => {
-    let filtered = messages;
     if (viewMode === 'DIRECT') {
-      filtered = messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId));
-    } else {
-      const displayed = [];
-      const seen = new Set();
-      [...messages].reverse().forEach(m => {
-        if (m.user_id === ADMIN_ID) {
-          const key = `${m.content}_${Math.floor(new Date(m.created_at).getTime() / 1000)}`;
-          if (!seen.has(key)) { displayed.push(m); seen.add(key); }
-        } else { displayed.push(m); }
-      });
-      return displayed;
+      return [...messages.filter(m => 
+        (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || 
+        (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId)
+      )].reverse();
     }
-    return [...filtered].reverse();
+    // GLOBAL表示（管理者の送信は1つに集約、ゲストからの受信はすべて表示）
+    const displayed = [];
+    const seenAdminMsgs = new Set();
+    [...messages].reverse().forEach(m => {
+      if (m.user_id === ADMIN_ID) {
+        const key = `${m.content}_${Math.floor(new Date(m.created_at).getTime() / 1000)}`;
+        if (!seenAdminMsgs.has(key)) { displayed.push(m); seenAdminMsgs.add(key); }
+      } else {
+        displayed.push(m);
+      }
+    });
+    return displayed;
   };
 
   return (
@@ -166,7 +150,7 @@ export default function AdminPage() {
         <h1 style={{ fontSize: '1.8rem', fontFamily: 'serif', fontStyle: 'italic', margin: 0 }}>for VAU - HOST</h1>
         <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '20px' }}>
           {['GLOBAL', 'DIRECT'].map(mode => (
-            <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>{mode}</button>
+            <button key={mode} onClick={() => { setViewMode(mode); if(mode==='GLOBAL') setSelectedGuestId(null); }} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '5px 15px', borderRadius: '15px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}>{mode}</button>
           ))}
         </div>
       </header>
@@ -175,7 +159,6 @@ export default function AdminPage() {
         {viewMode === 'DIRECT' && (
           <div style={{ width: '90px', borderRight: '1px solid #333', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
             {sortedGuests.map(g => {
-              // 未読数を計算
               const unread = messages.filter(m => m.user_id === g.id && m.receiver_id === ADMIN_ID && !m.is_read).length;
               return (
                 <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', textAlign: 'center', width: '100%' }}>
@@ -194,12 +177,14 @@ export default function AdminPage() {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {getDisplayMessages().map(m => {
                 const isMe = m.user_id === ADMIN_ID;
+                const guest = guests.find(g => g.id === (isMe ? m.receiver_id : m.user_id));
                 return (
                   <div key={m.id} onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => {
                     const timer = setTimeout(() => openMenu(e, m), 600);
                     e.target.ontouchend = () => clearTimeout(timer);
                   }} style={{ marginBottom: '20px', textAlign: isMe ? 'right' : 'left' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                      {!isMe && viewMode === 'GLOBAL' && <div style={{ fontSize: '0.7rem', color: '#D4AF37', marginBottom: '4px' }}>{guest?.username}</div>}
                       <div style={{ 
                         padding: m.is_image ? '5px' : '10px 15px', background: isMe ? '#500000' : '#1a1a1a', 
                         borderRadius: isMe ? '15px 15px 0 15px' : '15px 15px 15px 0', border: isMe ? 'none' : '1px solid #D4AF37', maxWidth: '85%',
@@ -218,9 +203,18 @@ export default function AdminPage() {
             </div>
           </div>
 
+          {/* 入力欄：常に一斉送信（GLOBAL SEND）として動作 */}
           <div style={{ padding: '15px', background: '#800000', display: 'flex', gap: '10px', borderTop: '2px solid #D4AF37', flexShrink: 0 }}>
-            <textarea value={inputText} onChange={e => setInputText(e.target.value)} placeholder={viewMode === 'GLOBAL' ? "一斉送信..." : "ダイレクト送信..."} style={{ flex: 1, background: '#800000', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px', padding: '10px 15px', outline: 'none', resize: 'none', height: '42px', fontSize: '16px' }} />
-            <button onClick={viewMode === 'GLOBAL' ? handleSendGlobal : handleSendDirect} style={{ background: '#000', color: '#D4AF37', padding: '0 20px', borderRadius: '20px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', border: 'none', cursor: 'pointer' }}>SEND</button>
+            <textarea 
+              value={inputText} 
+              onChange={e => setInputText(e.target.value)} 
+              placeholder="全ゲストへ一斉送信..." 
+              style={{ flex: 1, background: '#800000', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '20px', padding: '10px 15px', outline: 'none', resize: 'none', height: '42px', fontSize: '16px' }} 
+            />
+            <button 
+              onClick={handleSendGlobal} 
+              style={{ background: '#000', color: '#D4AF37', padding: '0 20px', borderRadius: '20px', fontWeight: 'bold', fontFamily: 'serif', fontStyle: 'italic', border: 'none', cursor: 'pointer' }}
+            >SEND ALL</button>
           </div>
         </div>
       </div>
