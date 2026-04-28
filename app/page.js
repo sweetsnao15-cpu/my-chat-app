@@ -13,7 +13,8 @@ export default function GuestPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
-  
+  const [deletedIds, setDeletedIds] = useState([]); // 自分側だけの削除用ステート
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -84,7 +85,7 @@ export default function GuestPage() {
     }
   };
 
-  // 長押し・右クリック共通のメニュー表示
+  // 長押し・右クリックメニュー表示
   const openMenu = (e, msg) => {
     e.preventDefault();
     const x = e.clientX || (e.touches && e.touches[0].clientX);
@@ -92,7 +93,6 @@ export default function GuestPage() {
     setContextMenu({ x, y, msg });
   };
 
-  // スマホ用長押しイベント
   const handleTouchStart = (e, msg) => {
     longPressTimer.current = setTimeout(() => openMenu(e, msg), 600);
   };
@@ -127,11 +127,9 @@ export default function GuestPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert("Login Error");
+    await supabase.auth.signInWithPassword({ email, password });
   };
 
-  // 1. ログイン画面
   if (!user) {
     return (
       <div style={{ height: '100dvh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'serif', padding: '20px' }}>
@@ -147,21 +145,28 @@ export default function GuestPage() {
     );
   }
 
-  // 2. チャット画面
   return (
     <div onClick={() => { setContextMenu(null); if (showSettings) setShowSettings(false); }} 
-         style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none' }}>
+         style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
       
-      {/* コンテキストメニュー（送信取消） */}
+      {/* 長押しメニュー */}
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 50, left: contextMenu.x - 50, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '8px', zIndex: 10000, padding: '10px 20px', cursor: 'pointer', color: '#ff4d4d', fontSize: '0.9rem', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}
-             onClick={async () => { if (contextMenu.msg.user_id === user.id) await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}>
-          送信取消
+        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
+          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 20px', fontSize: '0.9rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
+                  onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
+          
+          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 20px', fontSize: '0.9rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
+                  onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}>自分側だけの削除</button>
+          
+          {contextMenu.msg.user_id === user.id && (
+            <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 20px', fontSize: '0.9rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap' }}
+                    onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}>送信取消</button>
+          )}
         </div>
       )}
 
       {showSettings && (
-        <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', top: '70px', right: '20px', background: '#0a0a0a', border: '1px solid #800000', borderRadius: '20px', boxShadow: '0 0 20px rgba(255,0,0,0.4)', padding: '25px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '20px', width: '280px', alignItems: 'center' }}>
+        <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', top: '90px', right: '20px', background: '#0a0a0a', border: '1px solid #800000', borderRadius: '20px', boxShadow: '0 0 20px rgba(255,0,0,0.4)', padding: '25px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '20px', width: '280px', alignItems: 'center' }}>
           <div onClick={() => avatarFileInputRef.current?.click()} style={{ cursor: 'pointer', width: '90px', height: '90px', borderRadius: '50%', border: '2px solid #800000', overflow: 'hidden', background: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: '#800000', fontSize: '0.7rem' }}>TAP PHOTO</span>}
           </div>
@@ -172,17 +177,18 @@ export default function GuestPage() {
         </div>
       )}
 
-      {/* ヘッダー：中央に大きなタイトル */}
-      <header style={{ height: '60px', background: '#800000', borderBottom: '1px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}>
-        <span style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '2px' }}>for VAU</span>
-        <div onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} style={{ position: 'absolute', right: '15px', cursor: 'pointer', width: '38px', height: '38px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
+      {/* ヘッダー：高さを80pxにし、位置を微調整 */}
+      <header style={{ height: '80px', background: '#800000', borderBottom: '1px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}>
+        <span style={{ fontSize: '2rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '2px', paddingTop: '10px' }}>for VAU</span>
+        <div onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} 
+             style={{ position: 'absolute', right: '15px', top: '22px', cursor: 'pointer', width: '42px', height: '42px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
           {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>VAU</div>}
         </div>
       </header>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', background: '#050505' }}>
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-          {messages.map(m => {
+          {messages.filter(m => !deletedIds.includes(m.id)).map(m => {
             const isMe = m.user_id === user.id;
             return (
               <div key={m.id} style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
