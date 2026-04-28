@@ -11,15 +11,18 @@ export const metadata = {
   title: "for VAU",
   description: "Private chat for VAU",
   manifest: "/manifest.json",
-  // アイコン設定をmetadataに集約
   icons: {
-    icon: "/icon-512.png",
-    apple: "/icon-512.png",
+    icon: [
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "for VAU", // ホーム画面での表示名
+    title: "for VAU",
   },
 };
 
