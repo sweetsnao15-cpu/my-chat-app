@@ -23,7 +23,6 @@ export default function GuestPage() {
   const avatarFileInputRef = useRef(null);
   const longPressTimer = useRef(null);
 
-  // 最新メッセージまでスクロール（全体が見えるように少し余裕を持たせる）
   const scrollToBottom = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
@@ -51,7 +50,6 @@ export default function GuestPage() {
     return () => authListener.subscription.unsubscribe();
   }, []);
 
-  // メッセージ更新時にスクロール
   useEffect(() => {
     scrollToBottom();
   }, [messages, deletedIds]);
@@ -71,8 +69,12 @@ export default function GuestPage() {
 
   const saveProfile = async () => {
     if (!user) return;
-    await supabase.from('profiles').upsert({ id: user.id, username: profile.username, avatar_url: profile.avatar_url });
-    setShowSettings(false);
+    const { error } = await supabase.from('profiles').upsert({ 
+      id: user.id, 
+      username: profile.username, 
+      avatar_url: profile.avatar_url 
+    });
+    if (!error) setShowSettings(false);
   };
 
   const fetchMessages = async (userId) => {
@@ -129,7 +131,6 @@ export default function GuestPage() {
     if (!uploadError) {
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
       setProfile(prev => ({ ...prev, avatar_url: publicUrl }));
-      await supabase.from('profiles').upsert({ id: user.id, avatar_url: publicUrl, username: profile.username });
     }
     setIsAvatarUploading(false);
   };
@@ -148,7 +149,6 @@ export default function GuestPage() {
             <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
             <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
           </div>
-          {/* LOGIN に表記変更 */}
           <button type="submit" style={{ width: '100%', background: '#800000', color: '#fff', border: 'none', padding: '18px', borderRadius: '12px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold', textTransform: 'uppercase' }}>LOGIN</button>
         </form>
       </div>
@@ -156,9 +156,41 @@ export default function GuestPage() {
   }
 
   return (
-    <div onClick={() => { setContextMenu(null); if (showSettings) setShowSettings(false); }} 
+    <div onClick={() => { setContextMenu(null); }} 
          style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
       
+      {/* 設定画面（オーバーレイ） */}
+      {showSettings && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 20000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#111', border: '1px solid #D4AF37', borderRadius: '20px', padding: '30px', width: '100%', maxWidth: '400px', textAlign: 'center' }}>
+            <h2 style={{ color: '#D4AF37', marginBottom: '20px', fontStyle: 'italic' }}>PROFILE SETTINGS</h2>
+            
+            <div style={{ position: 'relative', width: '100px', height: '100px', margin: '0 auto 20px', cursor: 'pointer' }} onClick={() => avatarFileInputRef.current.click()}>
+              {profile.avatar_url ? (
+                <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid #D4AF37' }} />
+              ) : (
+                <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #D4AF37' }}>UP</div>
+              )}
+              {isAvatarUploading && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>...</div>}
+              <input type="file" ref={avatarFileInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
+            </div>
+
+            <input 
+              type="text" 
+              value={profile.username} 
+              onChange={(e) => setProfile(prev => ({ ...prev, username: e.target.value }))}
+              placeholder="Username"
+              style={{ width: '100%', background: '#000', border: '1px solid #333', borderRadius: '10px', padding: '12px', color: '#fff', marginBottom: '20px', outline: 'none', textAlign: 'center' }}
+            />
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setShowSettings(false)} style={{ flex: 1, background: 'transparent', border: '1px solid #444', color: '#888', padding: '12px', borderRadius: '10px', cursor: 'pointer' }}>CANCEL</button>
+              <button onClick={saveProfile} style={{ flex: 1, background: '#800000', border: 'none', color: '#fff', padding: '12px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>SAVE</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
           <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
