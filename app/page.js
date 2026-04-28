@@ -12,14 +12,15 @@ export default function GuestPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null);
   
-  // ログイン入力用
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const scrollRef = useRef(null);
   const chatFileInputRef = useRef(null);
   const avatarFileInputRef = useRef(null);
+  const longPressTimer = useRef(null);
 
   const scrollToBottom = () => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -43,13 +44,10 @@ export default function GuestPage() {
     return () => authListener.subscription.unsubscribe();
   }, []);
 
-  // リアルタイム更新の購読を強化
   useEffect(() => {
     if (!user) return;
     const channel = supabase.channel(`room_${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
-        fetchMessages(user.id);
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages(user.id))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user]);
@@ -76,29 +74,29 @@ export default function GuestPage() {
     }
   };
 
-  // メッセージ送信関数（ここが重要です）
   const handleSend = async (content, isImage = false) => {
     const text = content.trim();
     if (!text || !user) return;
-
-    const { error } = await supabase.from('messages').insert([
-      { 
-        content: text, 
-        user_id: user.id, 
-        receiver_id: ADMIN_ID, 
-        is_image: isImage, 
-        is_read: false 
-      }
-    ]);
-
-    if (error) {
-      console.error("Send Error:", error.message);
-      alert("送信に失敗しました");
-    } else {
+    const { error } = await supabase.from('messages').insert([{ content: text, user_id: user.id, receiver_id: ADMIN_ID, is_image: isImage, is_read: false }]);
+    if (!error) {
       if (!isImage) setInputText('');
-      fetchMessages(user.id); // 送信後に即時再取得
+      fetchMessages(user.id);
     }
   };
+
+  // 長押し・右クリック共通のメニュー表示
+  const openMenu = (e, msg) => {
+    e.preventDefault();
+    const x = e.clientX || (e.touches && e.touches[0].clientX);
+    const y = e.clientY || (e.touches && e.touches[0].clientY);
+    setContextMenu({ x, y, msg });
+  };
+
+  // スマホ用長押しイベント
+  const handleTouchStart = (e, msg) => {
+    longPressTimer.current = setTimeout(() => openMenu(e, msg), 600);
+  };
+  const handleTouchEnd = () => clearTimeout(longPressTimer.current);
 
   const handleChatImageUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -122,7 +120,6 @@ export default function GuestPage() {
     if (!uploadError) {
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
       setProfile(prev => ({ ...prev, avatar_url: publicUrl }));
-      // URLが変わった時点でDBも更新
       await supabase.from('profiles').upsert({ id: user.id, avatar_url: publicUrl, username: profile.username });
     }
     setIsAvatarUploading(false);
@@ -131,14 +128,15 @@ export default function GuestPage() {
   const handleLogin = async (e) => {
     e.preventDefault();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) alert("Login Error: " + error.message);
+    if (error) alert("Login Error");
   };
 
+  // 1. ログイン画面
   if (!user) {
     return (
-      <div style={{ height: '100dvh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', padding: '20px' }}>
+      <div style={{ height: '100dvh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'serif', padding: '20px' }}>
         <form onSubmit={handleLogin} style={{ background: '#0a0a0a', border: '2px solid #800000', borderRadius: '25px', boxShadow: '0 0 20px rgba(255, 0, 0, 0.5)', padding: '50px 30px', width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '25px' }}>
-          <h1 style={{ color: '#800000', fontSize: '3.5rem', fontWeight: 'bold', letterSpacing: '4px', textTransform: 'uppercase', margin: '0', textAlign: 'center' }}>for VAU</h1>
+          <h1 style={{ color: '#800000', fontSize: '3rem', fontStyle: 'italic', fontWeight: 'bold', margin: '0', textAlign: 'center' }}>for VAU</h1>
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
             <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
@@ -149,25 +147,35 @@ export default function GuestPage() {
     );
   }
 
+  // 2. チャット画面
   return (
-    <div onClick={() => { if (showSettings) setShowSettings(false); }} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif' }}>
+    <div onClick={() => { setContextMenu(null); if (showSettings) setShowSettings(false); }} 
+         style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none' }}>
       
+      {/* コンテキストメニュー（送信取消） */}
+      {contextMenu && (
+        <div style={{ position: 'fixed', top: contextMenu.y - 50, left: contextMenu.x - 50, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '8px', zIndex: 10000, padding: '10px 20px', cursor: 'pointer', color: '#ff4d4d', fontSize: '0.9rem', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}
+             onClick={async () => { if (contextMenu.msg.user_id === user.id) await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}>
+          送信取消
+        </div>
+      )}
+
       {showSettings && (
         <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', top: '70px', right: '20px', background: '#0a0a0a', border: '1px solid #800000', borderRadius: '20px', boxShadow: '0 0 20px rgba(255,0,0,0.4)', padding: '25px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '20px', width: '280px', alignItems: 'center' }}>
           <div onClick={() => avatarFileInputRef.current?.click()} style={{ cursor: 'pointer', width: '90px', height: '90px', borderRadius: '50%', border: '2px solid #800000', overflow: 'hidden', background: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: '#800000', fontSize: '0.7rem' }}>TAP PHOTO</span>}
-            {isAvatarUploading && <div style={{ position: 'absolute', fontSize: '0.6rem' }}>...</div>}
           </div>
           <input type="file" ref={avatarFileInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
           <input type="text" placeholder="NAME" value={profile.username} onChange={e => setProfile({...profile, username: e.target.value})} style={{ background: '#1a1a1a', border: 'none', borderBottom: '1px solid #333', color: '#fff', padding: '12px', outline: 'none', fontSize: '1rem', width: '100%', textAlign: 'center' }} />
           <button onClick={saveProfile} style={{ width: '100%', background: '#800000', color: '#fff', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: 'bold' }}>SAVE</button>
-          <button onClick={() => supabase.auth.signOut()} style={{ color: '#444', background: 'none', border: 'none', cursor: 'pointer' }}>EXIT</button>
+          <button onClick={() => supabase.auth.signOut()} style={{ color: '#800000', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>LOGOUT</button>
         </div>
       )}
 
-      <header style={{ padding: '10px 20px', background: '#800000', borderBottom: '1px solid #D4AF37', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-        <span style={{ fontSize: '1.2rem', fontStyle: 'italic', letterSpacing: '2px' }}>for VAU</span>
-        <div onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} style={{ cursor: 'pointer', width: '38px', height: '38px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
+      {/* ヘッダー：中央に大きなタイトル */}
+      <header style={{ height: '60px', background: '#800000', borderBottom: '1px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}>
+        <span style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '2px' }}>for VAU</span>
+        <div onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} style={{ position: 'absolute', right: '15px', cursor: 'pointer', width: '38px', height: '38px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
           {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>VAU</div>}
         </div>
       </header>
@@ -178,7 +186,12 @@ export default function GuestPage() {
             const isMe = m.user_id === user.id;
             return (
               <div key={m.id} style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                <div 
+                  onContextMenu={(e) => openMenu(e, m)}
+                  onTouchStart={(e) => handleTouchStart(e, m)}
+                  onTouchEnd={handleTouchEnd}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}
+                >
                   <div style={{ 
                     padding: m.is_image ? '5px' : '12px 16px', 
                     background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
