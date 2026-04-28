@@ -45,6 +45,10 @@ export default function GuestPage() {
       if (session?.user) {
         fetchProfile(session.user.id);
         fetchMessages(session.user.id);
+      } else {
+        // ログアウト時にステートをクリア
+        setMessages([]);
+        setProfile({ username: '', avatar_url: '' });
       }
     });
     return () => authListener.subscription.unsubscribe();
@@ -75,6 +79,12 @@ export default function GuestPage() {
       avatar_url: profile.avatar_url 
     });
     if (!error) setShowSettings(false);
+  };
+
+  // ログアウト機能
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setShowSettings(false);
   };
 
   const fetchMessages = async (userId) => {
@@ -180,8 +190,10 @@ export default function GuestPage() {
               value={profile.username} 
               onChange={(e) => setProfile(prev => ({ ...prev, username: e.target.value }))}
               placeholder="Username"
-              style={{ width: '100%', background: '#000', border: '1px solid #333', borderRadius: '10px', padding: '12px', color: '#fff', marginBottom: '20px', outline: 'none', textAlign: 'center' }}
+              style={{ width: '100%', background: '#000', border: '1px solid #333', borderRadius: '10px', padding: '12px', color: '#fff', marginBottom: '10px', outline: 'none', textAlign: 'center' }}
             />
+
+            <button onClick={handleLogout} style={{ width: '100%', background: 'transparent', border: 'none', color: '#666', fontSize: '0.8rem', marginBottom: '20px', textDecoration: 'underline', cursor: 'pointer' }}>LOGOUT</button>
 
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={() => setShowSettings(false)} style={{ flex: 1, background: 'transparent', border: '1px solid #444', color: '#888', padding: '12px', borderRadius: '10px', cursor: 'pointer' }}>CANCEL</button>
