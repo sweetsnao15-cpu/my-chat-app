@@ -23,8 +23,14 @@ export default function GuestPage() {
   const avatarFileInputRef = useRef(null);
   const longPressTimer = useRef(null);
 
+  // 最新メッセージまでスクロール（全体が見えるように少し余裕を持たせる）
   const scrollToBottom = () => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   };
 
   useEffect(() => {
@@ -44,6 +50,11 @@ export default function GuestPage() {
     });
     return () => authListener.subscription.unsubscribe();
   }, []);
+
+  // メッセージ更新時にスクロール
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, deletedIds]);
 
   useEffect(() => {
     if (!user) return;
@@ -71,7 +82,6 @@ export default function GuestPage() {
       .order('created_at', { ascending: true });
     if (data) {
       setMessages(data);
-      setTimeout(scrollToBottom, 50);
     }
   };
 
@@ -138,7 +148,8 @@ export default function GuestPage() {
             <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
             <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
           </div>
-          <button type="submit" style={{ width: '100%', background: '#800000', color: '#fff', border: 'none', padding: '18px', borderRadius: '12px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold', textTransform: 'uppercase' }}>LOG IN</button>
+          {/* LOGIN に表記変更 */}
+          <button type="submit" style={{ width: '100%', background: '#800000', color: '#fff', border: 'none', padding: '18px', borderRadius: '12px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold', textTransform: 'uppercase' }}>LOGIN</button>
         </form>
       </div>
     );
@@ -163,19 +174,6 @@ export default function GuestPage() {
         </div>
       )}
 
-      {showSettings && (
-        <div onClick={e => e.stopPropagation()} style={{ position: 'fixed', top: '90px', right: '20px', background: '#0a0a0a', border: '1px solid #800000', borderRadius: '20px', boxShadow: '0 0 20px rgba(255,0,0,0.4)', padding: '25px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '20px', width: '280px', alignItems: 'center' }}>
-          <div onClick={() => avatarFileInputRef.current?.click()} style={{ cursor: 'pointer', width: '90px', height: '90px', borderRadius: '50%', border: '2px solid #800000', overflow: 'hidden', background: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: '#800000', fontSize: '0.7rem' }}>TAP PHOTO</span>}
-          </div>
-          <input type="file" ref={avatarFileInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
-          <input type="text" placeholder="NAME" value={profile.username} onChange={e => setProfile({...profile, username: e.target.value})} style={{ background: '#1a1a1a', border: 'none', borderBottom: '1px solid #333', color: '#fff', padding: '12px', outline: 'none', fontSize: '1rem', width: '100%', textAlign: 'center' }} />
-          <button onClick={saveProfile} style={{ width: '100%', background: '#800000', color: '#fff', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: 'bold' }}>SAVE</button>
-          <button onClick={() => supabase.auth.signOut()} style={{ color: '#800000', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>LOGOUT</button>
-        </div>
-      )}
-
-      {/* タイトルサイズを1.8remに戻しました */}
       <header style={{ height: '80px', background: '#800000', borderBottom: '1px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}>
         <span style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '2px', paddingTop: '10px' }}>for VAU</span>
         <div onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} 
@@ -184,8 +182,8 @@ export default function GuestPage() {
         </div>
       </header>
 
-      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', background: '#050505' }}>
-        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', background: '#050505', scrollBehavior: 'smooth' }}>
+        <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '20px' }}>
           {messages.filter(m => !deletedIds.includes(m.id)).map(m => {
             const isMe = m.user_id === user.id;
             return (
@@ -202,9 +200,9 @@ export default function GuestPage() {
                     backdropFilter: 'blur(4px)',
                     borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
                     border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
-                    maxWidth: '85%', fontSize: '0.95rem', color: '#fff'
+                    maxWidth: '85%', fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
                   }}>
-                    {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
+                    {m.is_image ? <img src={m.content} onLoad={scrollToBottom} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
                   </div>
                   <div style={{ fontSize: '0.55rem', color: '#666', marginTop: 'auto' }}>
                     {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
