@@ -218,19 +218,20 @@ export default function GuestPage() {
           {messages.filter(m => !deletedIds.includes(m.id)).map((m, index) => {
             const isMe = m.user_id === user.id;
             const date = new Date(m.created_at);
-            const dateStr = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+            
+            // 年月日の表示形式を -2026/04/28- に変更
+            const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
             const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 
-            // 前のメッセージと日付が違うかチェック
             const prevMsg = index > 0 ? messages.filter(m => !deletedIds.includes(m.id))[index - 1] : null;
             const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
 
             return (
               <div key={m.id}>
-                {/* 日付セパレーター */}
                 {isNewDay && (
                   <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
-                    <div style={{ background: 'rgba(212, 175, 55, 0.1)', color: '#D4AF37', padding: '5px 20px', borderRadius: '20px', fontSize: '0.75rem', border: '1px solid rgba(212, 175, 55, 0.3)', letterSpacing: '1px' }}>
+                    {/* 楕円の枠を削除し、テキストのみをゴールドで表示 */}
+                    <div style={{ color: '#D4AF37', fontSize: '0.8rem', letterSpacing: '2px', fontWeight: 'bold' }}>
                       {dateStr}
                     </div>
                   </div>
