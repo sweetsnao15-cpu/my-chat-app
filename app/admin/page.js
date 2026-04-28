@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
+// ... Avatarコンポーネント ...
 const Avatar = ({ profile, size = '42px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
@@ -31,7 +32,6 @@ export default function AdminPage() {
   const fileInputRef = useRef(null);
   const longPressTimer = useRef(null);
 
-  // スクロールを最新（一番下）に移動する関数
   const scrollToBottom = useCallback((behavior = 'auto') => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
@@ -42,16 +42,16 @@ export default function AdminPage() {
   }, []);
 
   const fetchGuests = useCallback(async () => {
-    const { data: profiles } = await supabase.from('profiles').select('*');
-    if (profiles) setGuests(profiles);
+    const { data } = await supabase.from('profiles').select('*');
+    if (data) setGuests(data);
   }, []);
 
   const fetchMessages = useCallback(async () => {
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
     if (data) {
       setMessages(data);
-      // データ更新後に即スクロール
-      requestAnimationFrame(() => scrollToBottom('auto'));
+      // スマホの描画タイミングに合わせる
+      setTimeout(() => scrollToBottom('auto'), 50);
     }
   }, [scrollToBottom]);
 
@@ -63,12 +63,9 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
-  // モード切り替え時やゲスト選択時に「ぱっと」最新を表示
   useEffect(() => { 
-    if (messages.length > 0) {
-      scrollToBottom('auto');
-    }
-  }, [viewMode, selectedGuestId, scrollToBottom]);
+    if (messages.length > 0) scrollToBottom('auto');
+  }, [viewMode, selectedGuestId, messages.length, scrollToBottom]);
 
   const sortedGuests = useMemo(() => {
     const guestList = guests.filter(g => g.id !== ADMIN_ID);
@@ -79,29 +76,51 @@ export default function AdminPage() {
     });
   }, [guests, messages]);
 
+  // 全員への送信機能（スマホ対応版）
   const handleSend = async (content, isImage = false) => {
     const text = content?.trim();
-    if (!text || !user || viewMode !== 'GLOBAL') return;
-    const targetGuests = guests.filter(g => g.id !== ADMIN_ID);
-    if (targetGuests.length === 0) return;
+    if (!text || !user || isUploading) return;
 
-    const inserts = targetGuests.map(g => ({
-      content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: isImage, is_read: false
+    // 先にテキストエリアをクリアしてスマホのキーボード付近の挙動を安定させる
+    if (!isImage) setInputText('');
+
+    // プロフィールリストからゲストを取得
+    let targetProfiles = guests.filter(g => g.id !== ADMIN_ID);
+    
+    // もしstateのguestsが空なら再取得を試みる
+    if (targetProfiles.length === 0) {
+      const { data } = await supabase.from('profiles').select('id');
+      targetProfiles = data?.filter(g => g.id !== ADMIN_ID) || [];
+    }
+
+    if (targetProfiles.length === 0) return;
+
+    const inserts = targetProfiles.map(g => ({
+      content: text,
+      user_id: ADMIN_ID,
+      receiver_id: g.id,
+      is_image: isImage,
+      is_read: false
     }));
 
+    // supabaseへの挿入
     const { error } = await supabase.from('messages').insert(inserts);
-    if (!error) {
-      if (!isImage) setInputText('');
+    
+    if (error) {
+      console.error("Send Error:", error);
+    } else {
       fetchMessages();
     }
   };
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !user || viewMode !== 'GLOBAL') return;
+    if (!file || !user) return;
+    
     setIsUploading(true);
     const filePath = `admin/${Date.now()}_${file.name}`;
     const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, file);
+    
     if (!uploadError) {
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
       await handleSend(publicUrl, true);
@@ -172,16 +191,14 @@ export default function AdminPage() {
   };
 
   return (
-    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
+    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
       
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
           <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
                   onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
-          
           <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: (contextMenu.msg.user_id === ADMIN_ID) ? '1px solid #333' : 'none' }}
                   onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}>削除</button>
-          
           {contextMenu.msg.user_id === ADMIN_ID && (
             <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap' }}
                     onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}>送信取消</button>
@@ -214,9 +231,9 @@ export default function AdminPage() {
           <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>{renderMessages()}</div>
           
           {viewMode === 'GLOBAL' && (
-            <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0 }}>
+            <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
               <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-                <button onClick={() => fileInputRef.current?.click()} style={{ background: 'transparent', border: 'none', color: '#D4AF37', fontSize: '1.5rem', padding: '5px', cursor: 'pointer' }}>{isUploading ? '...' : '⊕'}</button>
+                <button type="button" onClick={() => fileInputRef.current?.click()} style={{ background: 'transparent', border: 'none', color: '#D4AF37', fontSize: '1.5rem', padding: '5px', cursor: 'pointer', minWidth: '40px' }}>{isUploading ? '...' : '⊕'}</button>
                 <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
                 
                 <textarea 
@@ -230,11 +247,11 @@ export default function AdminPage() {
                   }}
                   style={{ 
                     flex: 1, background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', 
-                    borderRadius: '18px', padding: '8px 15px', resize: 'none', fontSize: '15px', outline: 'none', 
+                    borderRadius: '18px', padding: '8px 15px', resize: 'none', fontSize: '16px', outline: 'none', 
                     fontFamily: 'serif', lineHeight: '1.4', maxHeight: '120px'
                   }} 
                 />
-                <button onClick={() => handleSend(inputText)} style={{ background: '#000', color: '#D4AF37', padding: '8px 18px', borderRadius: '18px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '13px', fontFamily: 'serif', cursor: 'pointer' }}>SEND</button>
+                <button type="button" onClick={() => handleSend(inputText)} style={{ background: '#000', color: '#D4AF37', padding: '8px 18px', borderRadius: '18px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '13px', fontFamily: 'serif', cursor: 'pointer', minWidth: '60px' }}>SEND</button>
               </div>
             </div>
           )}
