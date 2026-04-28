@@ -5,13 +5,13 @@ import { supabase } from '../../lib/supabase';
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
 const Avatar = ({ profile, size = '42px', isSelected = true }) => {
-  const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "G";
+  const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
     <div style={{ position: 'relative', width: size, height: size, opacity: isSelected ? 1 : 0.6, flexShrink: 0 }}>
       {profile?.avatar_url ? (
         <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444' }} alt="" />
       ) : (
-        <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'linear-gradient(135deg, #D4AF37 0%, #B69121 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.9rem', border: '1px solid #D4AF37' }}>{initial}</div>
+        <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem', border: '1px solid #D4AF37' }}>{initial}</div>
       )}
     </div>
   );
@@ -33,7 +33,10 @@ export default function AdminPage() {
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
   }, []);
 
@@ -46,9 +49,8 @@ export default function AdminPage() {
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
     if (data) {
       setMessages(data);
-      setTimeout(scrollToBottom, 50);
     }
-  }, [scrollToBottom]);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
@@ -58,7 +60,9 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
-  useEffect(() => { setTimeout(scrollToBottom, 100); }, [viewMode, selectedGuestId, scrollToBottom]);
+  useEffect(() => { 
+    setTimeout(scrollToBottom, 100); 
+  }, [viewMode, selectedGuestId, messages, deletedIds, scrollToBottom]);
 
   const sortedGuests = useMemo(() => {
     const guestList = guests.filter(g => g.id !== ADMIN_ID);
@@ -81,10 +85,9 @@ export default function AdminPage() {
   };
   const handleTouchEnd = () => clearTimeout(longPressTimer.current);
 
-  // 送信機能：GLOBALモード（全員送信）のみ実行
   const handleSend = async (content, isImage = false) => {
     const text = content.trim();
-    if (!text || !user || viewMode === 'DIRECT') return; // DIRECT時は送信しない
+    if (!text || !user || viewMode === 'DIRECT') return;
 
     const targetGuests = guests.filter(g => g.id !== ADMIN_ID);
     const inserts = targetGuests.map(g => ({
@@ -104,7 +107,7 @@ export default function AdminPage() {
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !user || viewMode === 'DIRECT') return; // DIRECT時はアップロードしない
+    if (!file || !user || viewMode === 'DIRECT') return;
     setIsUploading(true);
     const filePath = `admin/${Date.now()}_${file.name}`;
     const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, file);
@@ -131,56 +134,30 @@ export default function AdminPage() {
         })()
     ).filter(m => !deletedIds.includes(m.id));
 
-    let lastDate = "";
     return (
       <div style={{ maxWidth: '600px', margin: '0 auto', width: '100%' }}>
         {filtered.map(m => {
-          const currentDate = new Date(m.created_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
-          const showDate = currentDate !== lastDate;
-          lastDate = currentDate;
           const isMe = m.user_id === ADMIN_ID;
-          const senderProfile = guests.find(g => g.id === m.user_id);
-
           return (
-            <div key={m.id}>
-              {showDate && (
-                <div style={{ textAlign: 'center', margin: '30px 0 15px', fontSize: '0.7rem', color: '#D4AF37', letterSpacing: '0.1rem', fontFamily: 'serif' }}>― {currentDate} ―</div>
-              )}
-              <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  {!isMe && viewMode === 'GLOBAL' && <Avatar profile={senderProfile} size="42px" />}
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxWidth: '85%', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                    {!isMe && viewMode === 'GLOBAL' && (
-                      <span style={{ fontSize: '0.75rem', color: '#D4AF37', fontWeight: 'bold', marginLeft: '2px' }}>
-                        {senderProfile?.username || 'Guest'}
-                      </span>
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
-                      <div 
-                        onContextMenu={(e) => openMenu(e, m)}
-                        onTouchStart={(e) => handleTouchStart(e, m)}
-                        onTouchEnd={handleTouchEnd}
-                        style={{ 
-                          padding: m.is_image ? '5px' : '12px 16px', 
-                          background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
-                          backdropFilter: 'blur(4px)',
-                          borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                          border: isMe ? '1px solid rgba(128, 0, 0, 0.5)' : '1px solid #D4AF37', 
-                          fontSize: '0.95rem', 
-                          color: '#fff',
-                          whiteSpace: 'pre-wrap', 
-                          wordBreak: 'break-word', 
-                          width: 'fit-content'
-                        }}
-                      >
-                        {m.is_image ? <img src={m.content} onLoad={scrollToBottom} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" /> : m.content}
-                      </div>
-                      <div style={{ fontSize: '0.55rem', color: '#666', marginBottom: '2px', flexShrink: 0 }}>
-                        {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    </div>
-                  </div>
+            <div key={m.id} style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+              <div 
+                onContextMenu={(e) => openMenu(e, m)}
+                onTouchStart={(e) => handleTouchStart(e, m)}
+                onTouchEnd={handleTouchEnd}
+                style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}
+              >
+                <div style={{ 
+                  padding: m.is_image ? '5px' : '12px 16px', 
+                  background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
+                  backdropFilter: 'blur(4px)',
+                  borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
+                  border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
+                  maxWidth: '85%', fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+                }}>
+                  {m.is_image ? <img src={m.content} onLoad={scrollToBottom} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" /> : m.content}
+                </div>
+                <div style={{ fontSize: '0.55rem', color: '#666', marginTop: 'auto' }}>
+                  {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </div>
@@ -230,9 +207,8 @@ export default function AdminPage() {
         )}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#050505' }}>
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 15px' }}>{renderMessages()}</div>
+          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', scrollBehavior: 'smooth' }}>{renderMessages()}</div>
           
-          {/* GLOBAL モードの時のみ送信バーを表示 */}
           {viewMode === 'GLOBAL' && (
             <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0 }}>
               <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
