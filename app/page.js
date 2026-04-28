@@ -23,7 +23,6 @@ export default function GuestPage() {
   const avatarFileInputRef = useRef(null);
   const longPressTimer = useRef(null);
 
-  // スクロール制御：behaviorを'auto'にすることで瞬時に移動させます
   const scrollToBottom = useCallback((behavior = 'auto') => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
@@ -54,7 +53,6 @@ export default function GuestPage() {
     return () => authListener.subscription.unsubscribe();
   }, []);
 
-  // メッセージリストや削除IDが更新されたら即座に一番下へ
   useEffect(() => {
     if (messages.length > 0) {
       requestAnimationFrame(() => scrollToBottom('auto'));
@@ -219,14 +217,19 @@ export default function GuestPage() {
         <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '20px' }}>
           {messages.filter(m => !deletedIds.includes(m.id)).map(m => {
             const isMe = m.user_id === user.id;
+            const date = new Date(m.created_at);
+            // 年月日 時刻のフォーマット
+            const timeStr = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
             return (
               <div key={m.id} style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => handleTouchStart(e, m)} onTouchEnd={handleTouchEnd} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
                   <div style={{ padding: m.is_image ? '5px' : '12px 16px', background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', backdropFilter: 'blur(4px)', borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', maxWidth: '85%', fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                     {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
                   </div>
-                  <div style={{ fontSize: '0.55rem', color: '#666', marginTop: 'auto' }}>
-                    {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {/* 時刻表示をきんいろ（#D4AF37）に変更 */}
+                  <div style={{ fontSize: '0.55rem', color: '#D4AF37', marginTop: 'auto', whiteSpace: 'nowrap' }}>
+                    {timeStr}
                   </div>
                 </div>
               </div>
