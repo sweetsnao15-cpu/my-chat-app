@@ -31,11 +31,12 @@ export default function AdminPage() {
   const fileInputRef = useRef(null);
   const longPressTimer = useRef(null);
 
-  const scrollToBottom = useCallback(() => {
+  // スクロールを最新（一番下）に移動する関数
+  const scrollToBottom = useCallback((behavior = 'auto') => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
-        behavior: 'smooth'
+        behavior: behavior
       });
     }
   }, []);
@@ -49,8 +50,10 @@ export default function AdminPage() {
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
     if (data) {
       setMessages(data);
+      // データ更新後に即スクロール
+      requestAnimationFrame(() => scrollToBottom('auto'));
     }
-  }, []);
+  }, [scrollToBottom]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
@@ -60,9 +63,12 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
+  // モード切り替え時やゲスト選択時に「ぱっと」最新を表示
   useEffect(() => { 
-    setTimeout(scrollToBottom, 100); 
-  }, [viewMode, selectedGuestId, messages, deletedIds, scrollToBottom]);
+    if (messages.length > 0) {
+      scrollToBottom('auto');
+    }
+  }, [viewMode, selectedGuestId, scrollToBottom]);
 
   const sortedGuests = useMemo(() => {
     const guestList = guests.filter(g => g.id !== ADMIN_ID);
@@ -72,6 +78,37 @@ export default function AdminPage() {
       return (lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0) - (lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0);
     });
   }, [guests, messages]);
+
+  const handleSend = async (content, isImage = false) => {
+    const text = content?.trim();
+    if (!text || !user || viewMode !== 'GLOBAL') return;
+    const targetGuests = guests.filter(g => g.id !== ADMIN_ID);
+    if (targetGuests.length === 0) return;
+
+    const inserts = targetGuests.map(g => ({
+      content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: isImage, is_read: false
+    }));
+
+    const { error } = await supabase.from('messages').insert(inserts);
+    if (!error) {
+      if (!isImage) setInputText('');
+      fetchMessages();
+    }
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || viewMode !== 'GLOBAL') return;
+    setIsUploading(true);
+    const filePath = `admin/${Date.now()}_${file.name}`;
+    const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, file);
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
+      await handleSend(publicUrl, true);
+    }
+    setIsUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const openMenu = (e, msg) => {
     e.preventDefault();
@@ -84,39 +121,6 @@ export default function AdminPage() {
     longPressTimer.current = setTimeout(() => openMenu(e, msg), 600);
   };
   const handleTouchEnd = () => clearTimeout(longPressTimer.current);
-
-  const handleSend = async (content, isImage = false) => {
-    const text = content.trim();
-    if (!text || !user || viewMode === 'DIRECT') return;
-
-    const targetGuests = guests.filter(g => g.id !== ADMIN_ID);
-    const inserts = targetGuests.map(g => ({
-      content: text,
-      user_id: ADMIN_ID,
-      receiver_id: g.id,
-      is_image: isImage,
-      is_read: false
-    }));
-
-    if (inserts.length > 0) {
-      const { error } = await supabase.from('messages').insert(inserts);
-      if (!error && !isImage) setInputText('');
-      fetchMessages();
-    }
-  };
-
-  const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !user || viewMode === 'DIRECT') return;
-    setIsUploading(true);
-    const filePath = `admin/${Date.now()}_${file.name}`;
-    const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, file);
-    if (!uploadError) {
-      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      await handleSend(publicUrl, true);
-    }
-    setIsUploading(false);
-  };
 
   const renderMessages = () => {
     const filtered = (viewMode === 'DIRECT' 
@@ -154,7 +158,7 @@ export default function AdminPage() {
                   border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
                   maxWidth: '85%', fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
                 }}>
-                  {m.is_image ? <img src={m.content} onLoad={scrollToBottom} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" /> : m.content}
+                  {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" /> : m.content}
                 </div>
                 <div style={{ fontSize: '0.55rem', color: '#666', marginTop: 'auto' }}>
                   {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -207,7 +211,7 @@ export default function AdminPage() {
         )}
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#050505' }}>
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', scrollBehavior: 'smooth' }}>{renderMessages()}</div>
+          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>{renderMessages()}</div>
           
           {viewMode === 'GLOBAL' && (
             <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0 }}>
