@@ -13,7 +13,7 @@ export default function GuestPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
-  const [deletedIds, setDeletedIds] = useState([]); // 自分側だけの削除用ステート
+  const [deletedIds, setDeletedIds] = useState([]); 
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -85,7 +85,6 @@ export default function GuestPage() {
     }
   };
 
-  // 長押し・右クリックメニュー表示
   const openMenu = (e, msg) => {
     e.preventDefault();
     const x = e.clientX || (e.touches && e.touches[0].clientX);
@@ -134,7 +133,8 @@ export default function GuestPage() {
     return (
       <div style={{ height: '100dvh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'serif', padding: '20px' }}>
         <form onSubmit={handleLogin} style={{ background: '#0a0a0a', border: '2px solid #800000', borderRadius: '25px', boxShadow: '0 0 20px rgba(255, 0, 0, 0.5)', padding: '50px 30px', width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '25px' }}>
-          <h1 style={{ color: '#800000', fontSize: '3rem', fontStyle: 'italic', fontWeight: 'bold', margin: '0', textAlign: 'center' }}>for VAU</h1>
+          {/* ログイン画面の文字をさらに大きく */}
+          <h1 style={{ color: '#800000', fontSize: '3.8rem', fontStyle: 'italic', fontWeight: 'bold', margin: '0', textAlign: 'center' }}>for VAU</h1>
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
             <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
@@ -149,17 +149,17 @@ export default function GuestPage() {
     <div onClick={() => { setContextMenu(null); if (showSettings) setShowSettings(false); }} 
          style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
       
-      {/* 長押しメニュー */}
+      {/* メニュー：削除に表記変更 */}
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
-          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 20px', fontSize: '0.9rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
+          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
                   onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
           
-          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 20px', fontSize: '0.9rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
-                  onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}>自分側だけの削除</button>
+          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: (contextMenu.msg.user_id === user.id) ? '1px solid #333' : 'none' }}
+                  onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}>削除</button>
           
           {contextMenu.msg.user_id === user.id && (
-            <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 20px', fontSize: '0.9rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap' }}
+            <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap' }}
                     onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}>送信取消</button>
           )}
         </div>
@@ -177,11 +177,11 @@ export default function GuestPage() {
         </div>
       )}
 
-      {/* ヘッダー：高さを80pxにし、位置を微調整 */}
+      {/* チャット画面の文字をさらに大きく */}
       <header style={{ height: '80px', background: '#800000', borderBottom: '1px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}>
-        <span style={{ fontSize: '2rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '2px', paddingTop: '10px' }}>for VAU</span>
+        <span style={{ fontSize: '2.4rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '2px', paddingTop: '10px' }}>for VAU</span>
         <div onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} 
-             style={{ position: 'absolute', right: '15px', top: '22px', cursor: 'pointer', width: '42px', height: '42px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
+             style={{ position: 'absolute', right: '15px', top: '20px', cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
           {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>VAU</div>}
         </div>
       </header>
