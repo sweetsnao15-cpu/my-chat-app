@@ -4,7 +4,6 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-// アバターコンポーネント
 const Avatar = ({ profile, size = '32px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
@@ -23,7 +22,6 @@ export default function AdminPage() {
   const [guests, setGuests] = useState([]);
   const [selectedGuestId, setSelectedGuestId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [user, setUser] = useState(null);
   
   const scrollRef = useRef(null);
   const prevMsgCountRef = useRef(0);
@@ -45,10 +43,8 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
     fetchGuests();
     fetchMessages();
-    
     const channel = supabase.channel('admin_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
       .subscribe();
@@ -78,7 +74,7 @@ export default function AdminPage() {
     );
 
     return (
-      <div style={{ maxWidth: '600px', margin: '0 auto', width: '100%', paddingBottom: '40px' }}>
+      <div style={{ maxWidth: '600px', margin: '0 auto', width: '100%', paddingBottom: '20px' }}>
         {filtered.map((m, index) => {
           const isMe = m.user_id === ADMIN_ID;
           const senderProfile = guests.find(g => g.id === m.user_id);
@@ -91,7 +87,10 @@ export default function AdminPage() {
             <div key={m.id}>
               {isNewDay && (
                 <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
-                  <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic', opacity: 0.6 }}>{dateStr}</div>
+                  {/* 透過をなくした年月日 */}
+                  <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic' }}>
+                    {dateStr}
+                  </div>
                 </div>
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
@@ -101,14 +100,15 @@ export default function AdminPage() {
                     {!isMe && viewMode === 'GLOBAL' && (
                       <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>{senderProfile?.username || 'Guest'}</span>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
                       <div 
                         style={{ 
                           padding: m.is_image ? '5px' : '10px 14px', 
                           background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
                           borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
                           border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
-                          fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
+                          fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                          WebkitUserSelect: 'none', userSelect: 'none' // 青い選択を防止
                         }}>
                         {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
                       </div>
@@ -125,23 +125,23 @@ export default function AdminPage() {
   };
 
   return (
-    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif' }}>
-      <header style={{ padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
-        <h1 style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: 0, letterSpacing: '2px' }}>for VAU - MONITORING</h1>
-        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px' }}>
-          {['GLOBAL', 'DIRECT'].map(mode => (
-            <button key={mode} type="button" onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '6px 20px', borderRadius: '20px', fontSize: '0.7rem' }}>{mode}</button>
-          ))}
-        </div>
+    <div style={{ 
+      width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
+      background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
+      WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' // 全体で青い選択を禁止
+    }}>
+      {/* タイトルをHOSTに変更 */}
+      <header style={{ padding: '18px', background: '#800000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
+        <h1 style={{ fontSize: '1.4rem', fontStyle: 'italic', fontWeight: 'bold', margin: 0, letterSpacing: '4px', color: '#D4AF37' }}>HOST</h1>
       </header>
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {viewMode === 'DIRECT' && (
-          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0' }}>
+          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '25px', padding: '20px 0', flexShrink: 0 }}>
             {sortedGuests.map(g => (
               <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
-                <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px' }}>{g.username?.substring(0, 5)}</div>
+                <Avatar profile={g} size="50px" isSelected={selectedGuestId === g.id} />
+                <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '6px' }}>{g.username?.substring(0, 5)}</div>
               </div>
             ))}
           </div>
@@ -150,6 +150,33 @@ export default function AdminPage() {
           {renderMessages()}
         </div>
       </div>
+
+      {/* 選択ボタンを下に配置 */}
+      <footer style={{ 
+        height: '60px', background: '#800000', borderTop: '1px solid #D4AF37', 
+        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px',
+        paddingBottom: 'env(safe-area-inset-bottom)', boxSizing: 'content-box'
+      }}>
+        {['GLOBAL', 'DIRECT'].map(mode => (
+          <button 
+            key={mode} 
+            onClick={() => setViewMode(mode)} 
+            style={{ 
+              background: 'transparent', 
+              color: viewMode === mode ? '#D4AF37' : '#fff', 
+              border: 'none', 
+              fontSize: '0.8rem', 
+              fontWeight: 'bold', 
+              letterSpacing: '2px',
+              padding: '10px',
+              borderBottom: viewMode === mode ? '2px solid #D4AF37' : '2px solid transparent',
+              transition: 'all 0.3s'
+            }}
+          >
+            {mode}
+          </button>
+        ))}
+      </footer>
     </div>
   );
 }
