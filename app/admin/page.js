@@ -57,7 +57,9 @@ export default function AdminPage() {
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
     fetchGuests();
     fetchMessages();
-    const channel = supabase.channel('admin_room').on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages()).subscribe();
+    const channel = supabase.channel('admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
@@ -81,30 +83,19 @@ export default function AdminPage() {
     });
   }, [guests, messages]);
 
-  // 送信機能：ゲスト側と同様のロジックで全ゲストへ送信
   const handleSend = async (content, isImage = false) => {
     const text = content?.trim();
     if (!text || !user || isUploading) return;
-    
-    // 全ゲストを取得（管理者以外）
     const targetGuests = guests.filter(g => g.id !== ADMIN_ID);
     if (targetGuests.length === 0) return;
-
-    // 入力欄を先にクリア
     if (!isImage) setInputText('');
 
     const inserts = targetGuests.map(g => ({
-      content: text,
-      user_id: ADMIN_ID,
-      receiver_id: g.id,
-      is_image: isImage,
-      is_read: false
+      content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: isImage, is_read: false
     }));
 
     const { error } = await supabase.from('messages').insert(inserts);
-    if (!error) {
-      fetchMessages();
-    }
+    if (!error) fetchMessages();
   };
 
   const handleImageUpload = async (e) => {
@@ -120,11 +111,18 @@ export default function AdminPage() {
     setIsUploading(false);
   };
 
-  const executeDelete = async (msgId) => {
-    const { error } = await supabase.from('messages').delete().eq('id', msgId);
+  // 送信取消（削除）の実行
+  const executeDelete = async (msg) => {
+    // 管理者の送信したメッセージを特定して一括削除（GLOBALでの同一内容メッセージも含む）
+    const { error } = await supabase.from('messages')
+      .delete()
+      .eq('user_id', ADMIN_ID)
+      .eq('content', msg.content)
+      .eq('created_at', msg.created_at);
+
     if (!error) {
-      setMessages(prev => prev.filter(m => m.id !== msgId));
       setContextMenu(null);
+      fetchMessages(); // 状態を即時反映
     }
   };
 
@@ -134,13 +132,6 @@ export default function AdminPage() {
     const y = e.clientY || (e.touches && e.touches[0].clientY);
     setContextMenu({ x, y, msg });
   };
-
-  const handleTouchStart = (e, msg) => {
-    if (msg.user_id === ADMIN_ID) {
-      longPressTimer.current = setTimeout(() => openMenu(e, msg), 600);
-    }
-  };
-  const handleTouchEnd = () => clearTimeout(longPressTimer.current);
 
   const renderMessages = () => {
     const filtered = (viewMode === 'DIRECT' 
@@ -163,7 +154,6 @@ export default function AdminPage() {
           const isMe = m.user_id === ADMIN_ID;
           const senderProfile = guests.find(g => g.id === m.user_id);
           const date = new Date(m.created_at);
-          // 年月日のサイズを小さく
           const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
           const prevMsg = index > 0 ? filtered[index - 1] : null;
           const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
@@ -176,36 +166,42 @@ export default function AdminPage() {
                 </div>
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
                   
-                  {/* ヘッダー部分：アイコンと名前を横並びにし、上に配置 */}
-                  {!isMe && viewMode === 'GLOBAL' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', marginLeft: '2px' }}>
-                      <Avatar profile={senderProfile} size="24px" />
-                      <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold' }}>
-                        {senderProfile?.username || 'Guest'}
-                      </span>
+                  {!isMe && (
+                    <div style={{ marginTop: '2px' }}>
+                      <Avatar profile={senderProfile} size="28px" />
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '85%' }}>
-                    <div 
-                      onContextMenu={isMe ? (e) => openMenu(e, m) : null} 
-                      onTouchStart={isMe ? (e) => handleTouchStart(e, m) : null} 
-                      onTouchEnd={handleTouchEnd}
-                      style={{ 
-                        padding: m.is_image ? '5px' : '10px 14px', 
-                        background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
-                        backdropFilter: 'blur(4px)', 
-                        borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                        border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
-                        fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
-                      }}
-                    >
-                      {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
-                    </div>
-                    <div style={{ fontSize: '0.5rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px', opacity: 0.8 }}>
-                      {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                    {/* 名前部分 */}
+                    {!isMe && viewMode === 'GLOBAL' && (
+                      <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>
+                        {senderProfile?.username || 'Guest'}
+                      </span>
+                    )}
+
+                    {/* 吹き出し部分（名前の下に来るように調整） */}
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                      <div 
+                        onContextMenu={isMe ? (e) => openMenu(e, m) : null} 
+                        onTouchStart={isMe ? (e) => { longPressTimer.current = setTimeout(() => openMenu(e, m), 600); } : null} 
+                        onTouchEnd={() => clearTimeout(longPressTimer.current)}
+                        style={{ 
+                          padding: m.is_image ? '5px' : '10px 14px', 
+                          background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
+                          backdropFilter: 'blur(4px)', 
+                          borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
+                          border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
+                          fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
+                        }}
+                      >
+                        {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
+                      </div>
+                      <div style={{ fontSize: '0.5rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px', opacity: 0.8 }}>
+                        {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -222,7 +218,7 @@ export default function AdminPage() {
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
           <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
-          <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left' }} onClick={() => executeDelete(contextMenu.msg.id)}>送信取消</button>
+          <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left' }} onClick={() => executeDelete(contextMenu.msg)}>送信取消</button>
         </div>
       )}
       <header style={{ padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
