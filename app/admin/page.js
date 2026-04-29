@@ -87,7 +87,6 @@ export default function AdminPage() {
             <div key={m.id}>
               {isNewDay && (
                 <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
-                  {/* 透過をなくした年月日 */}
                   <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic' }}>
                     {dateStr}
                   </div>
@@ -108,7 +107,7 @@ export default function AdminPage() {
                           borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
                           border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
                           fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                          WebkitUserSelect: 'none', userSelect: 'none' // 青い選択を防止
+                          WebkitUserSelect: 'none', userSelect: 'none'
                         }}>
                         {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
                       </div>
@@ -128,20 +127,28 @@ export default function AdminPage() {
     <div style={{ 
       width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
-      WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' // 全体で青い選択を禁止
+      WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'
     }}>
-      {/* タイトルをHOSTに変更 */}
-      <header style={{ padding: '18px', background: '#800000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
-        <h1 style={{ fontSize: '1.4rem', fontStyle: 'italic', fontWeight: 'bold', margin: 0, letterSpacing: '4px', color: '#D4AF37' }}>HOST</h1>
+      {/* ゲスト側と同じ高さのヘッダー */}
+      <header style={{ 
+        padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', 
+        textAlign: 'center', flexShrink: 0, zIndex: 10
+      }}>
+        <h1 style={{ 
+          fontSize: '1.2rem', fontStyle: 'italic', fontWeight: 'bold', 
+          margin: 0, letterSpacing: '2px', color: '#fff' 
+        }}>
+          for VAU ｰHOSTｰ
+        </h1>
       </header>
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {viewMode === 'DIRECT' && (
-          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '25px', padding: '20px 0', flexShrink: 0 }}>
+          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
             {sortedGuests.map(g => (
               <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <Avatar profile={g} size="50px" isSelected={selectedGuestId === g.id} />
-                <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '6px' }}>{g.username?.substring(0, 5)}</div>
+                <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
+                <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px' }}>{g.username?.substring(0, 5)}</div>
               </div>
             ))}
           </div>
@@ -151,11 +158,12 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* 選択ボタンを下に配置 */}
+      {/* ゲスト側と同じ高さのフッター */}
       <footer style={{ 
-        height: '60px', background: '#800000', borderTop: '1px solid #D4AF37', 
+        padding: '12px 15px', background: '#800000', borderTop: '1px solid #D4AF37', 
         display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px',
-        paddingBottom: 'env(safe-area-inset-bottom)', boxSizing: 'content-box'
+        paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
+        flexShrink: 0, zIndex: 10
       }}>
         {['GLOBAL', 'DIRECT'].map(mode => (
           <button 
@@ -163,14 +171,14 @@ export default function AdminPage() {
             onClick={() => setViewMode(mode)} 
             style={{ 
               background: 'transparent', 
-              color: viewMode === mode ? '#D4AF37' : '#fff', 
+              color: viewMode === mode ? '#D4AF37' : 'rgba(255,255,255,0.6)', 
               border: 'none', 
-              fontSize: '0.8rem', 
+              fontSize: '0.75rem', 
               fontWeight: 'bold', 
               letterSpacing: '2px',
-              padding: '10px',
-              borderBottom: viewMode === mode ? '2px solid #D4AF37' : '2px solid transparent',
-              transition: 'all 0.3s'
+              padding: '5px 10px',
+              borderBottom: viewMode === mode ? '1px solid #D4AF37' : '1px solid transparent',
+              transition: 'all 0.2s ease'
             }}
           >
             {mode}
