@@ -1,132 +1,78 @@
 "use client";
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-// ... Avatarコンポーネント ...
-const Avatar = ({ profile, size = '42px', isSelected = true }) => {
-  const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
-  return (
-    <div style={{ position: 'relative', width: size, height: size, opacity: isSelected ? 1 : 0.6, flexShrink: 0 }}>
-      {profile?.avatar_url ? (
-        <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444' }} alt="" />
-      ) : (
-        <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem', border: '1px solid #D4AF37' }}>{initial}</div>
-      )}
-    </div>
-  );
-};
-
 export default function AdminPage() {
-  const [viewMode, setViewMode] = useState('GLOBAL');
-  const [guests, setGuests] = useState([]);
-  const [selectedGuestId, setSelectedGuestId] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [profiles, setProfiles] = useState({});
   const [inputText, setInputText] = useState('');
-  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [contextMenu, setContextMenu] = useState(null);
-  const [deletedIds, setDeletedIds] = useState([]); 
-  const [isUploading, setIsUploading] = useState(false);
   const scrollRef = useRef(null);
-  const fileInputRef = useRef(null);
   const longPressTimer = useRef(null);
 
-  const scrollToBottom = useCallback((behavior = 'auto') => {
+  const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: behavior
-      });
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'auto' });
     }
   }, []);
-
-  const fetchGuests = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('*');
-    if (data) setGuests(data);
-  }, []);
-
-  const fetchMessages = useCallback(async () => {
-    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
-    if (data) {
-      setMessages(data);
-      // スマホの描画タイミングに合わせる
-      setTimeout(() => scrollToBottom('auto'), 50);
-    }
-  }, [scrollToBottom]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
-    fetchGuests();
-    fetchMessages();
-    const channel = supabase.channel('admin_room').on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages()).subscribe();
+    fetchInitialData();
+    const channel = supabase.channel('admin_room')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchGuests, fetchMessages]);
+  }, []);
 
-  useEffect(() => { 
-    if (messages.length > 0) scrollToBottom('auto');
-  }, [viewMode, selectedGuestId, messages.length, scrollToBottom]);
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
-  const sortedGuests = useMemo(() => {
-    const guestList = guests.filter(g => g.id !== ADMIN_ID);
-    return guestList.sort((a, b) => {
-      const lastMsgA = [...messages].reverse().find(m => m.user_id === a.id || m.receiver_id === a.id);
-      const lastMsgB = [...messages].reverse().find(m => m.user_id === b.id || m.receiver_id === b.id);
-      return (lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0) - (lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0);
-    });
-  }, [guests, messages]);
+  const fetchInitialData = async () => {
+    await Promise.all([fetchProfiles(), fetchMessages()]);
+    setLoading(false);
+  };
 
-  // 全員への送信機能（スマホ対応版）
-  const handleSend = async (content, isImage = false) => {
-    const text = content?.trim();
-    if (!text || !user || isUploading) return;
-
-    // 先にテキストエリアをクリアしてスマホのキーボード付近の挙動を安定させる
-    if (!isImage) setInputText('');
-
-    // プロフィールリストからゲストを取得
-    let targetProfiles = guests.filter(g => g.id !== ADMIN_ID);
-    
-    // もしstateのguestsが空なら再取得を試みる
-    if (targetProfiles.length === 0) {
-      const { data } = await supabase.from('profiles').select('id');
-      targetProfiles = data?.filter(g => g.id !== ADMIN_ID) || [];
-    }
-
-    if (targetProfiles.length === 0) return;
-
-    const inserts = targetProfiles.map(g => ({
-      content: text,
-      user_id: ADMIN_ID,
-      receiver_id: g.id,
-      is_image: isImage,
-      is_read: false
-    }));
-
-    // supabaseへの挿入
-    const { error } = await supabase.from('messages').insert(inserts);
-    
-    if (error) {
-      console.error("Send Error:", error);
-    } else {
-      fetchMessages();
+  const fetchProfiles = async () => {
+    const { data } = await supabase.from('profiles').select('*');
+    if (data) {
+      const pMap = {};
+      data.forEach(p => { pMap[p.id] = p; });
+      setProfiles(pMap);
     }
   };
 
-  const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-    
-    setIsUploading(true);
-    const filePath = `admin/${Date.now()}_${file.name}`;
-    const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, file);
-    
-    if (!uploadError) {
-      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      await handleSend(publicUrl, true);
+  const fetchMessages = async () => {
+    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
+    if (data) setMessages(data);
+  };
+
+  // 送信取消（削除）機能
+  const deleteMessage = async (id) => {
+    const { error } = await supabase.from('messages').delete().eq('id', id);
+    if (!error) {
+      setMessages(prev => prev.filter(m => m.id !== id));
+      setContextMenu(null);
     }
-    setIsUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleSendAll = async () => {
+    const text = inputText.trim();
+    if (!text) return;
+    const { data: users } = await supabase.from('profiles').select('id');
+    if (users) {
+      const newMsgs = users.map(u => ({
+        content: text,
+        user_id: ADMIN_ID,
+        receiver_id: u.id,
+        is_read: false
+      }));
+      await supabase.from('messages').insert(newMsgs);
+      setInputText('');
+    }
   };
 
   const openMenu = (e, msg) => {
@@ -137,124 +83,106 @@ export default function AdminPage() {
   };
 
   const handleTouchStart = (e, msg) => {
-    longPressTimer.current = setTimeout(() => openMenu(e, msg), 600);
+    // 管理者（右側）のメッセージのみメニューを出す
+    if (msg.user_id === ADMIN_ID) {
+      longPressTimer.current = setTimeout(() => openMenu(e, msg), 600);
+    }
   };
   const handleTouchEnd = () => clearTimeout(longPressTimer.current);
 
-  const renderMessages = () => {
-    const filtered = (viewMode === 'DIRECT' 
-      ? messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId))
-      : (() => {
-          const displayed = [];
-          const seenAdminMsgs = new Set();
-          messages.forEach(m => {
-            if (m.user_id === ADMIN_ID) {
-              const key = `${m.content}_${Math.floor(new Date(m.created_at).getTime() / 1000)}`;
-              if (!seenAdminMsgs.has(key)) { displayed.push(m); seenAdminMsgs.add(key); }
-            } else { displayed.push(m); }
-          });
-          return displayed;
-        })()
-    ).filter(m => !deletedIds.includes(m.id));
-
-    return (
-      <div style={{ maxWidth: '600px', margin: '0 auto', width: '100%' }}>
-        {filtered.map(m => {
-          const isMe = m.user_id === ADMIN_ID;
-          return (
-            <div key={m.id} style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-              <div 
-                onContextMenu={(e) => openMenu(e, m)}
-                onTouchStart={(e) => handleTouchStart(e, m)}
-                onTouchEnd={handleTouchEnd}
-                style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}
-              >
-                <div style={{ 
-                  padding: m.is_image ? '5px' : '12px 16px', 
-                  background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
-                  backdropFilter: 'blur(4px)',
-                  borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                  border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
-                  maxWidth: '85%', fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
-                }}>
-                  {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" /> : m.content}
-                </div>
-                <div style={{ fontSize: '0.55rem', color: '#666', marginTop: 'auto' }}>
-                  {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+  if (loading) return <div style={{ height: '100dvh', background: '#000' }} />;
 
   return (
-    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'manipulation' }}>
+    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#050505', color: '#fff', fontFamily: 'serif', overflow: 'hidden' }}>
       
+      {/* 送信取消用メニュー */}
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
-          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
-                  onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
-          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: (contextMenu.msg.user_id === ADMIN_ID) ? '1px solid #333' : 'none' }}
-                  onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}>削除</button>
-          {contextMenu.msg.user_id === ADMIN_ID && (
-            <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap' }}
-                    onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}>送信取消</button>
-          )}
+        <div style={{ position: 'fixed', top: contextMenu.y - 50, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '8px', zIndex: 10000, boxShadow: '0 4px 15px rgba(0,0,0,0.8)' }}>
+          <button onClick={() => deleteMessage(contextMenu.msg.id)} style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '10px 20px', cursor: 'pointer', fontSize: '0.9rem' }}>送信取消</button>
         </div>
       )}
 
-      <header style={{ padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
-        <h1 style={{ fontSize: '1.4rem', fontStyle: 'italic', margin: 0, letterSpacing: '2px' }}>for VAU - HOST</h1>
-        <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px' }}>
-          {['GLOBAL', 'DIRECT'].map(mode => (
-            <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '4px 20px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', fontFamily: 'serif', cursor: 'pointer' }}>{mode}</button>
-          ))}
-        </div>
+      <header style={{ height: '70px', background: '#800000', borderBottom: '1px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <span style={{ fontSize: '1.5rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '2px' }}>ADMIN CONSOLE</span>
       </header>
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {viewMode === 'DIRECT' && (
-          <div style={{ width: '85px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '25px', padding: '20px 0', flexShrink: 0 }}>
-            {sortedGuests.map(g => (
-              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <Avatar profile={g} size="50px" isSelected={selectedGuestId === g.id} />
-                <div style={{ fontSize: '0.6rem', color: selectedGuestId === g.id ? '#D4AF37' : '#888', marginTop: '8px', textAlign: 'center', width: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.username || 'Guest'}</div>
-              </div>
-            ))}
-          </div>
-        )}
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+          {messages.map((m, index) => {
+            const isMe = m.user_id === ADMIN_ID;
+            const profile = profiles[m.user_id] || {};
+            const date = new Date(m.created_at);
+            const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
+            const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#050505' }}>
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>{renderMessages()}</div>
-          
-          {viewMode === 'GLOBAL' && (
-            <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
-              <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-                <button type="button" onClick={() => fileInputRef.current?.click()} style={{ background: 'transparent', border: 'none', color: '#D4AF37', fontSize: '1.5rem', padding: '5px', cursor: 'pointer', minWidth: '40px' }}>{isUploading ? '...' : '⊕'}</button>
-                <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
-                
-                <textarea 
-                  value={inputText} 
-                  onChange={e => setInputText(e.target.value)} 
-                  placeholder="全員へ送信..." 
-                  rows={1}
-                  onInput={(e) => {
-                    e.target.style.height = 'auto';
-                    e.target.style.height = e.target.scrollHeight + 'px';
-                  }}
-                  style={{ 
-                    flex: 1, background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', 
-                    borderRadius: '18px', padding: '8px 15px', resize: 'none', fontSize: '16px', outline: 'none', 
-                    fontFamily: 'serif', lineHeight: '1.4', maxHeight: '120px'
-                  }} 
-                />
-                <button type="button" onClick={() => handleSend(inputText)} style={{ background: '#000', color: '#D4AF37', padding: '8px 18px', borderRadius: '18px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '13px', fontFamily: 'serif', cursor: 'pointer', minWidth: '60px' }}>SEND</button>
+            const prevMsg = index > 0 ? messages[index - 1] : null;
+            const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
+
+            return (
+              <div key={m.id}>
+                {isNewDay && (
+                  <div style={{ textAlign: 'center', margin: '30px 0', color: '#D4AF37', fontSize: '0.9rem', fontWeight: 'bold', fontStyle: 'italic' }}>
+                    {dateStr}
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                  {!isMe && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', marginLeft: '5px' }}>
+                      <img src={profile.avatar_url || ''} style={{ width: '24px', height: '24px', borderRadius: '50%', border: '1px solid #D4AF37', objectFit: 'cover', background: '#333' }} alt="" />
+                      <span style={{ fontSize: '0.75rem', color: '#D4AF37', fontWeight: 'bold' }}>{profile.username || 'Unknown'}</span>
+                    </div>
+                  )}
+                  
+                  <div 
+                    onContextMenu={isMe ? (e) => openMenu(e, m) : null}
+                    onTouchStart={isMe ? (e) => handleTouchStart(e, m) : null}
+                    onTouchEnd={handleTouchEnd}
+                    style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '90%' }}
+                  >
+                    <div style={{ 
+                      padding: m.is_image ? '5px' : '10px 14px', 
+                      background: isMe ? 'rgba(80, 0, 0, 0.6)' : 'rgba(26, 26, 26, 0.8)', 
+                      borderRadius: isMe ? '15px 2px 15px 15px' : '2px 15px 15px 15px', 
+                      border: isMe ? '1px solid rgba(128, 0, 0, 0.5)' : '1px solid #D4AF37',
+                      fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+                    }}>
+                      {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '8px' }} alt="chat" /> : m.content}
+                    </div>
+                    <span style={{ fontSize: '0.6rem', color: '#D4AF37', minWidth: '35px' }}>{timeStr}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 入力エリア（スマホ対応） */}
+      <div style={{ padding: '15px', background: '#111', borderTop: '1px solid #800000', flexShrink: 0 }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+          <textarea
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onInput={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+            placeholder="全員へのメッセージを入力..."
+            rows={1}
+            style={{ 
+              flex: 1, background: '#000', color: '#fff', border: '1px solid #333', 
+              borderRadius: '15px', padding: '10px 15px', fontSize: '16px', outline: 'none', 
+              resize: 'none', maxHeight: '150px', lineHeight: '1.4' 
+            }}
+          />
+          <button 
+            onClick={handleSendAll}
+            style={{ 
+              background: '#800000', color: '#fff', border: '1px solid #D4AF37', 
+              padding: '10px 20px', borderRadius: '15px', fontWeight: 'bold', 
+              cursor: 'pointer', flexShrink: 0 
+            }}
+          >
+            SEND
+          </button>
         </div>
       </div>
     </div>
