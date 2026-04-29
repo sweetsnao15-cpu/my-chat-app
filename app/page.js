@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '@/lib/supabase'; // @エイリアスを使用してパスエラーを防止
+import { supabase } from '@/lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
@@ -8,18 +8,18 @@ export default function GuestPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [user, setUser] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
   const prevMsgCountRef = useRef(0);
 
-  // 最下部へスクロール
   const scrollToBottom = useCallback((behavior = 'auto') => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior });
     }
   }, []);
 
-  // メッセージ取得
   const fetchMessages = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
@@ -30,42 +30,26 @@ export default function GuestPage() {
     if (data) setMessages(data);
   }, [user]);
 
-  // 初期化：セッション取得
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
     });
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
-  // リアルタイム購読
   useEffect(() => {
     if (user) {
       fetchMessages();
       const channel = supabase.channel(`chat_${user.id}`)
-        .on('postgres_changes', { 
-          event: '*', 
-          schema: 'public', 
-          table: 'messages',
-          filter: `user_id=eq.${user.id}`
-        }, () => fetchMessages())
-        .on('postgres_changes', { 
-          event: '*', 
-          schema: 'public', 
-          table: 'messages',
-          filter: `receiver_id=eq.${user.id}`
-        }, () => fetchMessages())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
         .subscribe();
       return () => { supabase.removeChannel(channel); };
     }
   }, [user, fetchMessages]);
 
-  // メッセージ増分時にスクロール
   useEffect(() => {
     if (messages.length > prevMsgCountRef.current) {
       scrollToBottom('auto');
@@ -73,7 +57,7 @@ export default function GuestPage() {
     prevMsgCountRef.current = messages.length;
   }, [messages.length, scrollToBottom]);
 
-  // 送信処理
+  // テキスト送信
   const handleSend = async () => {
     const text = inputText.trim();
     if (!text || !user) return;
@@ -91,7 +75,44 @@ export default function GuestPage() {
 
     const { error } = await supabase.from('messages').insert([newMessage]);
     if (error) console.error(error);
-    else fetchMessages();
+  };
+
+  // 画像アップロード・送信
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setUploading(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${user.id}/${fileName}`;
+
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(filePath);
+
+      const newMessage = {
+        content: publicUrl,
+        user_id: user.id,
+        receiver_id: ADMIN_ID,
+        is_image: true,
+        is_read: false
+      };
+
+      await supabase.from('messages').insert([newMessage]);
+    } catch (error) {
+      console.error('Error uploading image:', error.message);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -99,24 +120,20 @@ export default function GuestPage() {
       width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif' 
     }}>
-      {/* ヘッダー：ホストより濃い赤 #600000 */}
+      {/* ヘッダー：パディングを増やして高さをアップ */}
       <header style={{ 
-        padding: '15px', background: '#600000', borderBottom: '1px solid #D4AF37', 
+        padding: '25px 15px', background: '#600000', borderBottom: '1px solid #D4AF37', 
         textAlign: 'center', flexShrink: 0, zIndex: 10
       }}>
         <h1 style={{ 
-          fontSize: '1.2rem', fontStyle: 'italic', fontWeight: 'bold', 
-          margin: 0, letterSpacing: '2px', color: '#fff' 
+          fontSize: '1.4rem', fontStyle: 'italic', fontWeight: 'bold', 
+          margin: 0, letterSpacing: '3px', color: '#fff' 
         }}>
           for VAU
         </h1>
       </header>
 
-      {/* メッセージ表示エリア */}
-      <div 
-        ref={scrollRef} 
-        style={{ flex: 1, overflowY: 'auto', padding: '20px 15px', background: '#050505' }}
-      >
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 15px', background: '#050505' }}>
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
           {messages.map((m, index) => {
             const isMe = m.user_id === user?.id;
@@ -129,27 +146,23 @@ export default function GuestPage() {
               <div key={m.id}>
                 {isNewDay && (
                   <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
-                    {/* 年月日の透過なし・くっきりした金色 */}
                     <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic' }}>
                       {dateStr}
                     </div>
                   </div>
                 )}
-                <div style={{ 
-                  marginBottom: '20px', display: 'flex', 
-                  flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' 
-                }}>
+                <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
                     <div style={{ 
                       padding: m.is_image ? '5px' : '10px 14px', 
-                      // 自分の吹き出し色をホスト（rgba(80,0,0,0.75)）と統一
                       background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
                       borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
                       border: '1px solid #D4AF37', 
-                      fontSize: '0.9rem', maxWidth: '240px', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                      color: '#fff'
+                      fontSize: '0.9rem', maxWidth: '240px', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
                     }}>
-                      {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px' }} alt="" /> : m.content}
+                      {m.is_image ? (
+                        <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" onLoad={() => scrollToBottom()} />
+                      ) : m.content}
                     </div>
                     <div style={{ fontSize: '0.5rem', color: '#D4AF37', opacity: 0.8, paddingBottom: '2px' }}>
                       {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -162,13 +175,25 @@ export default function GuestPage() {
         </div>
       </div>
 
-      {/* フッター：赤を濃く #600000 */}
       <footer style={{ 
         padding: '12px 15px', background: '#600000', borderTop: '1px solid #D4AF37',
-        paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
-        flexShrink: 0
+        paddingBottom: 'calc(12px + env(safe-area-inset-bottom))'
       }}>
         <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+          {/* 写真送信ボタン */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            style={{ 
+              background: 'transparent', border: '1px solid rgba(212,175,55,0.5)', 
+              borderRadius: '50%', width: '40px', height: '40px', display: 'flex', 
+              alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0
+            }}
+          >
+            <span style={{ color: '#D4AF37', fontSize: '1.2rem' }}>{uploading ? '...' : '📷'}</span>
+          </button>
+          <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
+
           <textarea
             ref={textareaRef}
             value={inputText}
@@ -188,8 +213,7 @@ export default function GuestPage() {
             onClick={handleSend}
             style={{ 
               background: '#000', color: '#D4AF37', border: '1px solid #D4AF37', 
-              borderRadius: '20px', padding: '10px 18px', fontWeight: 'bold', fontSize: '0.8rem',
-              cursor: 'pointer'
+              borderRadius: '20px', padding: '10px 18px', fontWeight: 'bold', fontSize: '0.8rem' 
             }}
           >
             SEND
