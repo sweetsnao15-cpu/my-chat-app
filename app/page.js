@@ -61,11 +61,12 @@ export default function GuestPage() {
     return () => authListener.subscription.unsubscribe();
   }, []);
 
+  // 削除(deletedIds)時はスクロールさせないよう依存配列から外す
   useEffect(() => {
     if (messages.length > 0) {
       requestAnimationFrame(() => scrollToBottom('auto'));
     }
-  }, [messages, deletedIds, scrollToBottom]);
+  }, [messages.length, scrollToBottom]); 
 
   useEffect(() => {
     if (!user) return;
@@ -224,14 +225,18 @@ export default function GuestPage() {
             const date = new Date(m.created_at);
             const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
             const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-            const prevMsg = index > 0 ? messages.filter(m => !deletedIds.includes(m.id))[index - 1] : null;
+            
+            // 削除されたメッセージを除外したリストで前のメッセージを判定
+            const filteredMessages = messages.filter(m => !deletedIds.includes(m.id));
+            const currentMsgIndex = filteredMessages.findIndex(fm => fm.id === m.id);
+            const prevMsg = currentMsgIndex > 0 ? filteredMessages[currentMsgIndex - 1] : null;
             const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
 
             return (
               <div key={m.id}>
                 {isNewDay && (
                   <div style={{ display: 'flex', justifyContent: 'center', margin: '40px 0 25px' }}>
-                    <div style={{ color: '#D4AF37', fontSize: '0.8rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic', fontFamily: 'serif', opacity: 0.5 }}>{dateStr}</div>
+                    <div style={{ color: '#D4AF37', fontSize: '0.8rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic', fontFamily: 'serif', opacity: 0.7 }}>{dateStr}</div>
                   </div>
                 )}
                 <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
