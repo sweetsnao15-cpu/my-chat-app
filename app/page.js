@@ -8,7 +8,7 @@ export default function GuestPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // 認証チェック中フラグ
+  const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState({ username: '', avatar_url: '' });
   const [showSettings, setShowSettings] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -34,7 +34,6 @@ export default function GuestPage() {
   }, []);
 
   useEffect(() => {
-    // 初回セッション確認
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
@@ -44,7 +43,7 @@ export default function GuestPage() {
           fetchMessages(session.user.id)
         ]);
       }
-      setLoading(false); // 確認が終わったらロード中を解除
+      setLoading(false);
     };
 
     checkSession();
@@ -94,7 +93,7 @@ export default function GuestPage() {
   };
 
   const handleLogout = async () => {
-    await supabase.signOut();
+    await supabase.auth.signOut();
     setShowSettings(false);
   };
 
@@ -161,14 +160,15 @@ export default function GuestPage() {
     await supabase.auth.signInWithPassword({ email, password });
   };
 
-  // ロード中は真っ暗な画面を表示してログイン画面のチラつきを防ぐ
+  // 読み込み中は空の背景のみを表示してチラつきを防止
   if (loading) {
     return <div style={{ height: '100dvh', background: '#000' }} />;
   }
 
   if (!user) {
     return (
-      <div style={{ height: '100dvh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'serif', padding: '20px' }}>
+      <div style={{ height: '100dvh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'serif', padding: '20px', animation: 'fadeIn 0.3s ease-in' }}>
+        <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
         <form onSubmit={handleLogin} style={{ background: '#0a0a0a', border: '2px solid #800000', borderRadius: '25px', boxShadow: '0 0 20px rgba(255, 0, 0, 0.5)', padding: '50px 30px', width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '25px' }}>
           <h1 style={{ color: '#800000', fontSize: '3.8rem', fontStyle: 'italic', fontWeight: 'bold', margin: '0', textAlign: 'center' }}>for VAU</h1>
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '15px' }}>
@@ -183,7 +183,8 @@ export default function GuestPage() {
 
   return (
     <div onClick={() => { setContextMenu(null); }} 
-         style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
+         style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', animation: 'fadeIn 0.3s ease-in' }}>
+      <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
       
       {showSettings && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 20000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -245,14 +246,14 @@ export default function GuestPage() {
               <div key={m.id}>
                 {isNewDay && (
                   <div style={{ display: 'flex', justifyContent: 'center', margin: '40px 0 25px' }}>
-                    {/* フォントをGeorgiaに変更し、字間を広げておしゃれな印象に */}
+                    {/* for VAUと同じItalic, Bold, Serifスタイルを適用 */}
                     <div style={{ 
                       color: '#D4AF37', 
-                      fontSize: '0.85rem', 
-                      letterSpacing: '3.5px', 
-                      fontWeight: '300',
-                      fontFamily: '"Georgia", serif',
-                      opacity: 0.8
+                      fontSize: '1rem', 
+                      letterSpacing: '2px', 
+                      fontWeight: 'bold',
+                      fontStyle: 'italic',
+                      fontFamily: 'serif'
                     }}>
                       {dateStr}
                     </div>
