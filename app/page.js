@@ -15,12 +15,14 @@ export default function GuestPage() {
   const fileInputRef = useRef(null);
   const prevMsgCountRef = useRef(0);
 
+  // スクロール制御
   const scrollToBottom = useCallback((behavior = 'auto') => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior });
     }
   }, []);
 
+  // メッセージ取得
   const fetchMessages = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
@@ -31,6 +33,7 @@ export default function GuestPage() {
     if (data) setMessages(data);
   }, [user]);
 
+  // 認証状態の監視
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -41,6 +44,7 @@ export default function GuestPage() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // リアルタイム通信
   useEffect(() => {
     if (user) {
       fetchMessages();
@@ -57,6 +61,17 @@ export default function GuestPage() {
     }
     prevMsgCountRef.current = messages.length;
   }, [messages.length, scrollToBottom]);
+
+  // ログイン・ログアウト
+  const handleSignIn = async () => {
+    await supabase.auth.signInWithOAuth({ provider: 'google' });
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setIsMenuOpen(false);
+    window.location.reload();
+  };
 
   const handleSend = async () => {
     const text = inputText.trim();
@@ -85,13 +100,8 @@ export default function GuestPage() {
     }
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    window.location.reload();
-  };
-
   return (
-    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif' }}>
       
       {/* ヘッダー */}
       <header style={{ 
@@ -102,9 +112,9 @@ export default function GuestPage() {
           for VAU
         </h1>
 
-        {/* 右上のゲストアイコン */}
+        {/* ゲストアイコン */}
         <button 
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          onClick={() => setIsMenuOpen(true)}
           style={{ 
             position: 'absolute', right: '20px', background: 'transparent', border: '1px solid #D4AF37', 
             borderRadius: '50%', width: '40px', height: '40px', overflow: 'hidden', padding: 0, cursor: 'pointer' 
@@ -122,17 +132,45 @@ export default function GuestPage() {
         </button>
       </header>
 
-      {/* 設定メニュー */}
+      {/* 元のデザインのメニュー画面（オーバーレイ） */}
       {isMenuOpen && (
         <div style={{ 
-          position: 'absolute', top: '75px', right: '15px', background: '#1a1a1a', 
-          border: '1px solid #D4AF37', borderRadius: '10px', width: '180px', zIndex: 100,
-          boxShadow: '0 4px 15px rgba(0,0,0,0.5)', overflow: 'hidden'
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 1000, 
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(10px)'
         }}>
-          <div style={{ padding: '15px', fontSize: '0.8rem', borderBottom: '1px solid #333', color: '#D4AF37', textAlign: 'center', fontWeight: 'bold' }}>ACCOUNT</div>
-          <button style={{ width: '100%', padding: '12px', background: 'none', border: 'none', color: '#fff', fontSize: '0.8rem', textAlign: 'left', cursor: 'pointer' }}>プロフィール編集</button>
-          <button onClick={handleSignOut} style={{ width: '100%', padding: '12px', background: 'none', border: 'none', color: '#ff4d4d', fontSize: '0.8rem', textAlign: 'left', cursor: 'pointer' }}>ログアウト</button>
-          <div onClick={() => setIsMenuOpen(false)} style={{ padding: '10px', textAlign: 'center', fontSize: '0.7rem', color: '#666', cursor: 'pointer' }}>閉じる</div>
+          <div style={{ width: '80%', maxWidth: '300px', textAlign: 'center' }}>
+            <h2 style={{ color: '#D4AF37', fontStyle: 'italic', marginBottom: '40px', letterSpacing: '3px' }}>SETTINGS</h2>
+            
+            {!user ? (
+              <button 
+                onClick={handleSignIn}
+                style={{ width: '100%', padding: '15px', background: '#D4AF37', color: '#000', border: 'none', borderRadius: '30px', fontWeight: 'bold', marginBottom: '20px', cursor: 'pointer' }}
+              >
+                Googleでログイン
+              </button>
+            ) : (
+              <>
+                <div style={{ marginBottom: '30px', color: '#D4AF37', fontSize: '0.9rem' }}>
+                  Logged in as: <br/>
+                  <span style={{ color: '#fff' }}>{user.email}</span>
+                </div>
+                <button 
+                  onClick={handleSignOut}
+                  style={{ width: '100%', padding: '15px', background: 'transparent', color: '#ff4d4d', border: '1px solid #ff4d4d', borderRadius: '30px', fontWeight: 'bold', marginBottom: '20px', cursor: 'pointer' }}
+                >
+                  LOGOUT
+                </button>
+              </>
+            )}
+
+            <button 
+              onClick={() => setIsMenuOpen(false)}
+              style={{ width: '100%', padding: '15px', background: 'transparent', color: '#fff', border: '1px solid #333', borderRadius: '30px', cursor: 'pointer' }}
+            >
+              CLOSE
+            </button>
+          </div>
         </div>
       )}
 
@@ -177,15 +215,17 @@ export default function GuestPage() {
         </div>
       </div>
 
+      {/* フッター */}
       <footer style={{ padding: '12px 15px', background: '#600000', borderTop: '1px solid #D4AF37', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
         <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+          
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             style={{ 
               background: 'transparent', border: '1px solid #D4AF37', borderRadius: '50%', 
               width: '42px', height: '42px', display: 'flex', alignItems: 'center', 
-              justifyContent: 'center', cursor: 'pointer', flexShrink: 0
+              justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: '0.2s'
             }}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -206,9 +246,13 @@ export default function GuestPage() {
               borderRadius: '22px', padding: '10px 18px', fontSize: '16px', resize: 'none', outline: 'none', maxHeight: '150px'
             }}
           />
+          
           <button
             onClick={handleSend}
-            style={{ background: '#000', color: '#D4AF37', border: '1px solid #D4AF37', borderRadius: '22px', padding: '10px 20px', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer' }}
+            style={{ 
+              background: '#000', color: '#D4AF37', border: '1px solid #D4AF37', 
+              borderRadius: '22px', padding: '10px 20px', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer'
+            }}
           >
             SEND
           </button>
