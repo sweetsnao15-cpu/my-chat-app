@@ -45,7 +45,6 @@ export default function GuestPage() {
       }
       setLoading(false);
     };
-
     checkSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -59,7 +58,6 @@ export default function GuestPage() {
       }
       setLoading(false);
     });
-
     return () => authListener.subscription.unsubscribe();
   }, []);
 
@@ -102,9 +100,7 @@ export default function GuestPage() {
       .select('*')
       .or(`user_id.eq.${userId},receiver_id.eq.${userId}`)
       .order('created_at', { ascending: true });
-    if (data) {
-      setMessages(data);
-    }
+    if (data) setMessages(data);
   };
 
   const handleSend = async (content, isImage = false) => {
@@ -160,10 +156,7 @@ export default function GuestPage() {
     await supabase.auth.signInWithPassword({ email, password });
   };
 
-  // 読み込み中は空の背景のみを表示してチラつきを防止
-  if (loading) {
-    return <div style={{ height: '100dvh', background: '#000' }} />;
-  }
+  if (loading) return <div style={{ height: '100dvh', background: '#000' }} />;
 
   if (!user) {
     return (
@@ -182,8 +175,7 @@ export default function GuestPage() {
   }
 
   return (
-    <div onClick={() => { setContextMenu(null); }} 
-         style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', animation: 'fadeIn 0.3s ease-in' }}>
+    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', animation: 'fadeIn 0.3s ease-in' }}>
       <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
       
       {showSettings && (
@@ -196,7 +188,6 @@ export default function GuestPage() {
               ) : (
                 <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #D4AF37' }}>UP</div>
               )}
-              {isAvatarUploading && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>...</div>}
               <input type="file" ref={avatarFileInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
             </div>
             <input type="text" value={profile.username} onChange={(e) => setProfile(prev => ({ ...prev, username: e.target.value }))} placeholder="Username" style={{ width: '100%', background: '#000', border: '1px solid #333', borderRadius: '10px', padding: '12px', color: '#fff', marginBottom: '10px', outline: 'none', textAlign: 'center' }} />
@@ -211,21 +202,17 @@ export default function GuestPage() {
 
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
-          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #333' }}
-                  onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
-          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: (contextMenu.msg.user_id === user.id) ? '1px solid #333' : 'none' }}
-                  onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}>削除</button>
+          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
+          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: (contextMenu.msg.user_id === user.id) ? '1px solid #333' : 'none' }} onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}>削除</button>
           {contextMenu.msg.user_id === user.id && (
-            <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap' }}
-                    onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}>送信取消</button>
+            <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left' }} onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}>送信取消</button>
           )}
         </div>
       )}
 
       <header style={{ height: '80px', background: '#800000', borderBottom: '1px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}>
         <span style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '2px', paddingTop: '10px' }}>for VAU</span>
-        <div onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} 
-             style={{ position: 'absolute', right: '15px', top: '20px', cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
+        <div onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} style={{ position: 'absolute', right: '15px', top: '20px', cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
           {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>VAU</div>}
         </div>
       </header>
@@ -235,10 +222,8 @@ export default function GuestPage() {
           {messages.filter(m => !deletedIds.includes(m.id)).map((m, index) => {
             const isMe = m.user_id === user.id;
             const date = new Date(m.created_at);
-            
             const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
             const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-
             const prevMsg = index > 0 ? messages.filter(m => !deletedIds.includes(m.id))[index - 1] : null;
             const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
 
@@ -246,28 +231,15 @@ export default function GuestPage() {
               <div key={m.id}>
                 {isNewDay && (
                   <div style={{ display: 'flex', justifyContent: 'center', margin: '40px 0 25px' }}>
-                    {/* for VAUと同じItalic, Bold, Serifスタイルを適用 */}
-                    <div style={{ 
-                      color: '#D4AF37', 
-                      fontSize: '1rem', 
-                      letterSpacing: '2px', 
-                      fontWeight: 'bold',
-                      fontStyle: 'italic',
-                      fontFamily: 'serif'
-                    }}>
-                      {dateStr}
-                    </div>
+                    <div style={{ color: '#D4AF37', fontSize: '0.8rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic', fontFamily: 'serif', opacity: 0.5 }}>{dateStr}</div>
                   </div>
                 )}
-
                 <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                   <div onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => handleTouchStart(e, m)} onTouchEnd={handleTouchEnd} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
                     <div style={{ padding: m.is_image ? '5px' : '12px 16px', background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', backdropFilter: 'blur(4px)', borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', maxWidth: '85%', fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
                     </div>
-                    <div style={{ fontSize: '0.55rem', color: '#D4AF37', marginTop: 'auto', whiteSpace: 'nowrap' }}>
-                      {timeStr}
-                    </div>
+                    <div style={{ fontSize: '0.55rem', color: '#D4AF37', marginTop: 'auto' }}>{timeStr}</div>
                   </div>
                 </div>
               </div>
