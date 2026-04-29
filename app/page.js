@@ -8,6 +8,7 @@ export default function GuestPage() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true); // 認証チェック中フラグ
   const [profile, setProfile] = useState({ username: '', avatar_url: '' });
   const [showSettings, setShowSettings] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -33,13 +34,21 @@ export default function GuestPage() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // 初回セッション確認
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
-        fetchMessages(session.user.id);
+        await Promise.all([
+          fetchProfile(session.user.id),
+          fetchMessages(session.user.id)
+        ]);
       }
-    });
+      setLoading(false); // 確認が終わったらロード中を解除
+    };
+
+    checkSession();
+
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -49,7 +58,9 @@ export default function GuestPage() {
         setMessages([]);
         setProfile({ username: '', avatar_url: '' });
       }
+      setLoading(false);
     });
+
     return () => authListener.subscription.unsubscribe();
   }, []);
 
@@ -83,7 +94,7 @@ export default function GuestPage() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await supabase.signOut();
     setShowSettings(false);
   };
 
@@ -149,6 +160,11 @@ export default function GuestPage() {
     e.preventDefault();
     await supabase.auth.signInWithPassword({ email, password });
   };
+
+  // ロード中は真っ暗な画面を表示してログイン画面のチラつきを防ぐ
+  if (loading) {
+    return <div style={{ height: '100dvh', background: '#000' }} />;
+  }
 
   if (!user) {
     return (
@@ -219,7 +235,6 @@ export default function GuestPage() {
             const isMe = m.user_id === user.id;
             const date = new Date(m.created_at);
             
-            // 年月日の表示形式を -2026/04/28- に変更
             const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
             const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 
@@ -229,9 +244,16 @@ export default function GuestPage() {
             return (
               <div key={m.id}>
                 {isNewDay && (
-                  <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
-                    {/* 楕円の枠を削除し、テキストのみをゴールドで表示 */}
-                    <div style={{ color: '#D4AF37', fontSize: '0.8rem', letterSpacing: '2px', fontWeight: 'bold' }}>
+                  <div style={{ display: 'flex', justifyContent: 'center', margin: '40px 0 25px' }}>
+                    {/* フォントをGeorgiaに変更し、字間を広げておしゃれな印象に */}
+                    <div style={{ 
+                      color: '#D4AF37', 
+                      fontSize: '0.85rem', 
+                      letterSpacing: '3.5px', 
+                      fontWeight: '300',
+                      fontFamily: '"Georgia", serif',
+                      opacity: 0.8
+                    }}>
                       {dateStr}
                     </div>
                   </div>
