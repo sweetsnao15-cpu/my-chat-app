@@ -23,6 +23,8 @@ export default function GuestPage() {
   const chatFileInputRef = useRef(null);
   const avatarFileInputRef = useRef(null);
   const longPressTimer = useRef(null);
+  // 前回のメッセージ数を保持するためのRef
+  const prevMsgCountRef = useRef(0);
 
   const scrollToBottom = useCallback((behavior = 'auto') => {
     if (scrollRef.current) {
@@ -61,12 +63,13 @@ export default function GuestPage() {
     return () => authListener.subscription.unsubscribe();
   }, []);
 
-  // 削除(deletedIds)時はスクロールさせないよう依存配列から外す
+  // スクロール制御の修正：メッセージが増えた時だけスクロールする
   useEffect(() => {
-    if (messages.length > 0) {
+    if (messages.length > prevMsgCountRef.current) {
       requestAnimationFrame(() => scrollToBottom('auto'));
     }
-  }, [messages.length, scrollToBottom]); 
+    prevMsgCountRef.current = messages.length;
+  }, [messages, scrollToBottom]);
 
   useEffect(() => {
     if (!user) return;
@@ -226,7 +229,6 @@ export default function GuestPage() {
             const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
             const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
             
-            // 削除されたメッセージを除外したリストで前のメッセージを判定
             const filteredMessages = messages.filter(m => !deletedIds.includes(m.id));
             const currentMsgIndex = filteredMessages.findIndex(fm => fm.id === m.id);
             const prevMsg = currentMsgIndex > 0 ? filteredMessages[currentMsgIndex - 1] : null;
