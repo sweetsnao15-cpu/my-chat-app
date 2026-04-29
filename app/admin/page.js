@@ -89,7 +89,13 @@ export default function AdminPage() {
 
     // ADMIN以外の全ゲストIDを取得
     const targetIds = guests.filter(g => g.id !== ADMIN_ID).map(g => g.id);
-    if (targetIds.length === 0) return;
+    if (targetIds.length === 0) {
+      alert("送信対象がいません");
+      return;
+    }
+
+    // 送信処理中のUIロック
+    setIsUploading(true);
 
     const inserts = targetIds.map(id => ({
       content: text,
@@ -99,17 +105,21 @@ export default function AdminPage() {
       is_read: false
     }));
 
-    // 入力欄をクリアしてフォーカスを外す（スマホのキーボードを閉じる）
+    // 先に入力をクリアしてキーボードを閉じる（UX向上）
     setInputText('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.blur();
+      textareaRef.current.blur(); 
     }
 
     const { error } = await supabase.from('messages').insert(inserts);
-    if (!error) {
+    if (error) {
+      console.error(error);
+      alert("送信に失敗しました");
+    } else {
       fetchMessages();
     }
+    setIsUploading(false);
   };
 
   const handleImageUpload = async (e) => {
@@ -120,7 +130,6 @@ export default function AdminPage() {
     const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, file);
     if (!uploadError) {
       const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      
       const targetIds = guests.filter(g => g.id !== ADMIN_ID).map(g => g.id);
       const inserts = targetIds.map(id => ({
         content: publicUrl,
@@ -156,7 +165,7 @@ export default function AdminPage() {
     setContextMenu({ x, y, msg });
   };
 
-  // ★ビルドエラー回避のため、returnの前に定義
+  // ビルドエラー回避のため、returnの前に定義
   const renderMessages = () => {
     const filtered = (viewMode === 'DIRECT' 
       ? messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId))
@@ -224,9 +233,10 @@ export default function AdminPage() {
 
   return (
     <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none' }}>
+      {/* ...コンテキストメニュー省略... */}
       {contextMenu && viewMode === 'GLOBAL' && (
         <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
-          <button type="button" style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
+          <button type="button" style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { if (contextMenu.msg.content) navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
           <button type="button" style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left' }} onClick={() => executeDelete(contextMenu.msg)}>送信取消</button>
         </div>
       )}
@@ -241,6 +251,7 @@ export default function AdminPage() {
       </header>
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* DIRECTモード時のゲスト一覧 */}
         {viewMode === 'DIRECT' && (
           <div style={{ width: '85px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '25px', padding: '20px 0', flexShrink: 0 }}>
             {sortedGuests.map(g => (
@@ -254,24 +265,66 @@ export default function AdminPage() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#050505' }}>
           <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>{renderMessages()}</div>
           
+          {/* ★入力欄（スマホ最適化） */}
           {viewMode === 'GLOBAL' && (
-            <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0, paddingBottom: 'calc(15px + env(safe-area-inset-bottom))' }}>
+            <div style={{ 
+              padding: '10px 15px', 
+              background: '#800000', 
+              borderTop: '1px solid #D4AF37', 
+              flexShrink: 0, 
+              paddingBottom: 'calc(15px + env(safe-area-inset-bottom))' 
+            }}>
               <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <button type="button" onClick={() => fileInputRef.current?.click()} style={{ background: 'transparent', border: 'none', color: '#D4AF37', fontSize: '1.8rem', padding: '0 5px', cursor: 'pointer' }}>{isUploading ? '...' : '⊕'}</button>
+                <button 
+                  type="button" 
+                  onClick={() => fileInputRef.current?.click()} 
+                  style={{ background: 'transparent', border: 'none', color: '#D4AF37', fontSize: '1.8rem', padding: '0 5px', cursor: 'pointer' }}
+                >
+                  {isUploading ? '...' : '⊕'}
+                </button>
                 <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
+                
                 <textarea 
                   ref={textareaRef}
                   value={inputText} 
                   onChange={e => setInputText(e.target.value)} 
-                  placeholder="全員へ一斉送信..." 
+                  placeholder="全員へ送信..." 
                   rows={1} 
-                  onInput={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} 
-                  style={{ flex: 1, background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '20px', padding: '10px 15px', resize: 'none', fontSize: '16px', outline: 'none', lineHeight: '1.2' }} 
+                  onInput={(e) => {
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }} 
+                  style={{ 
+                    flex: 1, 
+                    background: 'rgba(0,0,0,0.3)', 
+                    color: '#fff', 
+                    border: '1px solid rgba(255,255,255,0.2)', 
+                    borderRadius: '20px', 
+                    padding: '10px 15px', 
+                    resize: 'none', 
+                    fontSize: '16px', // iOSズーム防止
+                    outline: 'none', 
+                    lineHeight: '1.2'
+                  }} 
                 />
+                
                 <button 
                   type="button" 
                   onClick={handleSendAll} 
-                  style={{ background: '#000', color: '#D4AF37', padding: '10px 20px', borderRadius: '20px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '14px', minWidth: '70px' }}>
+                  disabled={isUploading || !inputText.trim()}
+                  style={{ 
+                    background: '#000', 
+                    color: (isUploading || !inputText.trim()) ? '#555' : '#D4AF37', 
+                    padding: '10px 18px', 
+                    borderRadius: '20px', 
+                    fontWeight: 'bold', 
+                    border: '1px solid',
+                    borderColor: (isUploading || !inputText.trim()) ? '#333' : '#D4AF37', 
+                    fontSize: '14px', 
+                    minWidth: '70px',
+                    WebkitTapHighlightColor: 'transparent'
+                  }}
+                >
                   SEND
                 </button>
               </div>
