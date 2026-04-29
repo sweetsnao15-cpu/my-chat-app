@@ -4,14 +4,14 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-const Avatar = ({ profile, size = '42px', isSelected = true }) => {
+const Avatar = ({ profile, size = '32px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
     <div style={{ position: 'relative', width: size, height: size, opacity: isSelected ? 1 : 0.6, flexShrink: 0 }}>
       {profile?.avatar_url ? (
         <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444' }} alt="" />
       ) : (
-        <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem', border: '1px solid #D4AF37' }}>{initial}</div>
+        <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.7rem', border: '1px solid #D4AF37' }}>{initial}</div>
       )}
     </div>
   );
@@ -81,21 +81,30 @@ export default function AdminPage() {
     });
   }, [guests, messages]);
 
+  // 送信機能：ゲスト側と同様のロジックで全ゲストへ送信
   const handleSend = async (content, isImage = false) => {
-    if (viewMode !== 'GLOBAL') return;
     const text = content?.trim();
     if (!text || !user || isUploading) return;
-    const targetProfiles = guests.filter(g => g.id !== ADMIN_ID);
-    if (targetProfiles.length === 0) return;
+    
+    // 全ゲストを取得（管理者以外）
+    const targetGuests = guests.filter(g => g.id !== ADMIN_ID);
+    if (targetGuests.length === 0) return;
+
+    // 入力欄を先にクリア
     if (!isImage) setInputText('');
-    const inserts = targetProfiles.map(g => ({
-      content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: isImage, is_read: false
+
+    const inserts = targetGuests.map(g => ({
+      content: text,
+      user_id: ADMIN_ID,
+      receiver_id: g.id,
+      is_image: isImage,
+      is_read: false
     }));
-    try {
-      const { error } = await supabase.from('messages').insert(inserts);
-      if (error) throw error;
+
+    const { error } = await supabase.from('messages').insert(inserts);
+    if (!error) {
       fetchMessages();
-    } catch (err) { console.error("送信エラー:", err); }
+    }
   };
 
   const handleImageUpload = async (e) => {
@@ -154,6 +163,7 @@ export default function AdminPage() {
           const isMe = m.user_id === ADMIN_ID;
           const senderProfile = guests.find(g => g.id === m.user_id);
           const date = new Date(m.created_at);
+          // 年月日のサイズを小さく
           const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
           const prevMsg = index > 0 ? filtered[index - 1] : null;
           const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
@@ -161,47 +171,41 @@ export default function AdminPage() {
           return (
             <div key={m.id}>
               {isNewDay && (
-                <div style={{ display: 'flex', justifyContent: 'center', margin: '40px 0 25px' }}>
-                  <div style={{ color: '#D4AF37', fontSize: '0.8rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic', opacity: 0.7 }}>{dateStr}</div>
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
+                  <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic', opacity: 0.6 }}>{dateStr}</div>
                 </div>
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                   
-                  {/* アイコン部分 */}
-                  {!isMe && (
-                    <div style={{ marginTop: '18px' }}>
-                      <Avatar profile={senderProfile} size="36px" />
+                  {/* ヘッダー部分：アイコンと名前を横並びにし、上に配置 */}
+                  {!isMe && viewMode === 'GLOBAL' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', marginLeft: '2px' }}>
+                      <Avatar profile={senderProfile} size="24px" />
+                      <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold' }}>
+                        {senderProfile?.username || 'Guest'}
+                      </span>
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '80%' }}>
-                    {/* 名前部分 */}
-                    {!isMe && viewMode === 'GLOBAL' && (
-                      <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px', marginLeft: '2px' }}>
-                        {senderProfile?.username || 'Guest'}
-                      </span>
-                    )}
-
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
-                      <div 
-                        onContextMenu={isMe ? (e) => openMenu(e, m) : null} 
-                        onTouchStart={isMe ? (e) => handleTouchStart(e, m) : null} 
-                        onTouchEnd={handleTouchEnd}
-                        style={{ 
-                          padding: m.is_image ? '5px' : '12px 16px', 
-                          background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
-                          backdropFilter: 'blur(4px)', 
-                          borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                          border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
-                          fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
-                        }}
-                      >
-                        {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
-                      </div>
-                      <div style={{ fontSize: '0.55rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px' }}>
-                        {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '85%' }}>
+                    <div 
+                      onContextMenu={isMe ? (e) => openMenu(e, m) : null} 
+                      onTouchStart={isMe ? (e) => handleTouchStart(e, m) : null} 
+                      onTouchEnd={handleTouchEnd}
+                      style={{ 
+                        padding: m.is_image ? '5px' : '10px 14px', 
+                        background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
+                        backdropFilter: 'blur(4px)', 
+                        borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
+                        border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
+                        fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
+                      }}
+                    >
+                      {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
+                    </div>
+                    <div style={{ fontSize: '0.5rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px', opacity: 0.8 }}>
+                      {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                 </div>
