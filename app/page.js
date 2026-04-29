@@ -9,6 +9,7 @@ export default function GuestPage() {
   const [inputText, setInputText] = useState('');
   const [user, setUser] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false); 
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -84,16 +85,58 @@ export default function GuestPage() {
     }
   };
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.reload();
+  };
+
   return (
-    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif' }}>
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', position: 'relative' }}>
       
-      {/* ヘッダー：タイトルを大きく修正 */}
-      <header style={{ padding: '25px 15px', background: '#600000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0, zIndex: 10 }}>
-        <h1 style={{ fontSize: '1.6rem', fontStyle: 'italic', fontWeight: 'bold', margin: 0, letterSpacing: '4px', color: '#fff' }}>
+      {/* ヘッダー */}
+      <header style={{ 
+        padding: '25px 15px', background: '#600000', borderBottom: '1px solid #D4AF37', 
+        display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0, zIndex: 10 
+      }}>
+        <h1 style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', margin: 0, letterSpacing: '4px', color: '#fff' }}>
           for VAU
         </h1>
+
+        {/* 右上のゲストアイコン */}
+        <button 
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          style={{ 
+            position: 'absolute', right: '20px', background: 'transparent', border: '1px solid #D4AF37', 
+            borderRadius: '50%', width: '40px', height: '40px', overflow: 'hidden', padding: 0, cursor: 'pointer' 
+          }}
+        >
+          {user?.user_metadata?.avatar_url ? (
+            <img src={user.user_metadata.avatar_url} alt="User" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+              </svg>
+            </div>
+          )}
+        </button>
       </header>
 
+      {/* 設定メニュー */}
+      {isMenuOpen && (
+        <div style={{ 
+          position: 'absolute', top: '75px', right: '15px', background: '#1a1a1a', 
+          border: '1px solid #D4AF37', borderRadius: '10px', width: '180px', zIndex: 100,
+          boxShadow: '0 4px 15px rgba(0,0,0,0.5)', overflow: 'hidden'
+        }}>
+          <div style={{ padding: '15px', fontSize: '0.8rem', borderBottom: '1px solid #333', color: '#D4AF37', textAlign: 'center', fontWeight: 'bold' }}>ACCOUNT</div>
+          <button style={{ width: '100%', padding: '12px', background: 'none', border: 'none', color: '#fff', fontSize: '0.8rem', textAlign: 'left', cursor: 'pointer' }}>プロフィール編集</button>
+          <button onClick={handleSignOut} style={{ width: '100%', padding: '12px', background: 'none', border: 'none', color: '#ff4d4d', fontSize: '0.8rem', textAlign: 'left', cursor: 'pointer' }}>ログアウト</button>
+          <div onClick={() => setIsMenuOpen(false)} style={{ padding: '10px', textAlign: 'center', fontSize: '0.7rem', color: '#666', cursor: 'pointer' }}>閉じる</div>
+        </div>
+      )}
+
+      {/* メッセージエリア */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 15px', background: '#050505' }}>
         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
           {messages.map((m, index) => {
@@ -117,9 +160,7 @@ export default function GuestPage() {
                       background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
                       borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
                       border: '1px solid #D4AF37', 
-                      fontSize: '0.95rem', 
-                      maxWidth: '85%', // ホスト側のグローバルと同じ幅
-                      whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#fff'
+                      fontSize: '0.95rem', maxWidth: '85%', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: '#fff'
                     }}>
                       {m.is_image ? (
                         <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} alt="" onLoad={() => scrollToBottom()} />
@@ -138,16 +179,13 @@ export default function GuestPage() {
 
       <footer style={{ padding: '12px 15px', background: '#600000', borderTop: '1px solid #D4AF37', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
         <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-          
-          {/* おしゃれなカメラアイコンボタン */}
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             style={{ 
               background: 'transparent', border: '1px solid #D4AF37', borderRadius: '50%', 
               width: '42px', height: '42px', display: 'flex', alignItems: 'center', 
-              justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: '0.2s',
-              opacity: uploading ? 0.5 : 1
+              justifyContent: 'center', cursor: 'pointer', flexShrink: 0
             }}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -168,13 +206,9 @@ export default function GuestPage() {
               borderRadius: '22px', padding: '10px 18px', fontSize: '16px', resize: 'none', outline: 'none', maxHeight: '150px'
             }}
           />
-          
           <button
             onClick={handleSend}
-            style={{ 
-              background: '#000', color: '#D4AF37', border: '1px solid #D4AF37', 
-              borderRadius: '22px', padding: '10px 20px', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer'
-            }}
+            style={{ background: '#000', color: '#D4AF37', border: '1px solid #D4AF37', borderRadius: '22px', padding: '10px 20px', fontWeight: 'bold', fontSize: '0.85rem', cursor: 'pointer' }}
           >
             SEND
           </button>
