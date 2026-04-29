@@ -70,10 +70,6 @@ export default function AdminPage() {
     prevMsgCountRef.current = messages.length;
   }, [messages.length, scrollToBottom]);
 
-  useEffect(() => {
-    scrollToBottom('auto');
-  }, [viewMode, selectedGuestId, scrollToBottom]);
-
   const sortedGuests = useMemo(() => {
     const guestList = guests.filter(g => g.id !== ADMIN_ID);
     return guestList.sort((a, b) => {
@@ -86,16 +82,29 @@ export default function AdminPage() {
   const handleSend = async (content, isImage = false) => {
     const text = content?.trim();
     if (!text || !user || isUploading) return;
-    const targetGuests = guests.filter(g => g.id !== ADMIN_ID);
-    if (targetGuests.length === 0) return;
-    if (!isImage) setInputText('');
 
-    const inserts = targetGuests.map(g => ({
-      content: text, user_id: ADMIN_ID, receiver_id: g.id, is_image: isImage, is_read: false
+    let targetIds = [];
+    if (viewMode === 'GLOBAL') {
+      targetIds = guests.filter(g => g.id !== ADMIN_ID).map(g => g.id);
+    } else if (selectedGuestId) {
+      targetIds = [selectedGuestId];
+    }
+
+    if (targetIds.length === 0) return;
+
+    const inserts = targetIds.map(id => ({
+      content: text, user_id: ADMIN_ID, receiver_id: id, is_image: isImage, is_read: false
     }));
 
     const { error } = await supabase.from('messages').insert(inserts);
-    if (!error) fetchMessages();
+    if (!error) {
+      if (!isImage) {
+        setInputText('');
+        const textarea = document.querySelector('textarea');
+        if (textarea) textarea.style.height = 'auto';
+      }
+      fetchMessages();
+    }
   };
 
   const handleImageUpload = async (e) => {
@@ -111,9 +120,7 @@ export default function AdminPage() {
     setIsUploading(false);
   };
 
-  // 送信取消（削除）の実行
   const executeDelete = async (msg) => {
-    // 管理者の送信したメッセージを特定して一括削除（GLOBALでの同一内容メッセージも含む）
     const { error } = await supabase.from('messages')
       .delete()
       .eq('user_id', ADMIN_ID)
@@ -122,7 +129,7 @@ export default function AdminPage() {
 
     if (!error) {
       setContextMenu(null);
-      fetchMessages(); // 状態を即時反映
+      fetchMessages();
     }
   };
 
@@ -167,41 +174,20 @@ export default function AdminPage() {
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  
-                  {!isMe && (
-                    <div style={{ marginTop: '2px' }}>
-                      <Avatar profile={senderProfile} size="28px" />
-                    </div>
-                  )}
-
+                  {!isMe && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="28px" /></div>}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
-                    {/* 名前部分 */}
                     {!isMe && viewMode === 'GLOBAL' && (
-                      <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>
-                        {senderProfile?.username || 'Guest'}
-                      </span>
+                      <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>{senderProfile?.username || 'Guest'}</span>
                     )}
-
-                    {/* 吹き出し部分（名前の下に来るように調整） */}
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
                       <div 
                         onContextMenu={isMe ? (e) => openMenu(e, m) : null} 
                         onTouchStart={isMe ? (e) => { longPressTimer.current = setTimeout(() => openMenu(e, m), 600); } : null} 
                         onTouchEnd={() => clearTimeout(longPressTimer.current)}
-                        style={{ 
-                          padding: m.is_image ? '5px' : '10px 14px', 
-                          background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
-                          backdropFilter: 'blur(4px)', 
-                          borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                          border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
-                          fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
-                        }}
-                      >
+                        style={{ padding: m.is_image ? '5px' : '10px 14px', background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', backdropFilter: 'blur(4px)', borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                         {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
                       </div>
-                      <div style={{ fontSize: '0.5rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px', opacity: 0.8 }}>
-                        {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
+                      <div style={{ fontSize: '0.5rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px', opacity: 0.8 }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   </div>
                 </div>
@@ -214,7 +200,7 @@ export default function AdminPage() {
   };
 
   return (
-    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}>
+    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none' }}>
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
           <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
@@ -225,7 +211,7 @@ export default function AdminPage() {
         <h1 style={{ fontSize: '1.4rem', fontStyle: 'italic', fontWeight: 'bold', margin: 0, letterSpacing: '2px' }}>for VAU - HOST</h1>
         <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px' }}>
           {['GLOBAL', 'DIRECT'].map(mode => (
-            <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '6px 20px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', fontFamily: 'serif', cursor: 'pointer' }}>{mode}</button>
+            <button key={mode} onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '6px 20px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer' }}>{mode}</button>
           ))}
         </div>
       </header>
@@ -242,16 +228,14 @@ export default function AdminPage() {
         )}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#050505' }}>
           <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>{renderMessages()}</div>
-          {viewMode === 'GLOBAL' && (
-            <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
-              <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-                <button type="button" onClick={() => fileInputRef.current?.click()} style={{ background: 'transparent', border: 'none', color: '#D4AF37', fontSize: '1.5rem', padding: '5px', cursor: 'pointer', minWidth: '40px' }}>{isUploading ? '...' : '⊕'}</button>
-                <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
-                <textarea value={inputText} onChange={e => setInputText(e.target.value)} placeholder="全員へ送信..." rows={1} onInput={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} style={{ flex: 1, background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '18px', padding: '8px 15px', resize: 'none', fontSize: '16px', outline: 'none', fontFamily: 'serif', lineHeight: '1.4', maxHeight: '120px' }} />
-                <button type="button" onClick={() => handleSend(inputText)} style={{ background: '#000', color: '#D4AF37', padding: '10px 18px', borderRadius: '18px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '13px', fontFamily: 'serif', cursor: 'pointer', minWidth: '60px' }}>SEND</button>
-              </div>
+          <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
+            <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+              <button type="button" onClick={() => fileInputRef.current?.click()} style={{ background: 'transparent', border: 'none', color: '#D4AF37', fontSize: '1.5rem', padding: '5px', cursor: 'pointer', minWidth: '40px' }}>{isUploading ? '...' : '⊕'}</button>
+              <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleImageUpload} />
+              <textarea value={inputText} onChange={e => setInputText(e.target.value)} placeholder={viewMode === 'GLOBAL' ? "全員へ送信..." : "このゲストへ送信..."} rows={1} onInput={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} style={{ flex: 1, background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '18px', padding: '8px 15px', resize: 'none', fontSize: '16px', outline: 'none', lineHeight: '1.4', maxHeight: '120px' }} />
+              <button type="button" onClick={() => handleSend(inputText)} style={{ background: '#000', color: '#D4AF37', padding: '10px 18px', borderRadius: '18px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '13px', cursor: 'pointer', minWidth: '60px' }}>SEND</button>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
