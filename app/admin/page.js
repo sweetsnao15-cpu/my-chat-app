@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
+// アバターコンポーネント
 const Avatar = ({ profile, size = '32px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
@@ -23,10 +24,8 @@ export default function AdminPage() {
   const [selectedGuestId, setSelectedGuestId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [user, setUser] = useState(null);
-  const [contextMenu, setContextMenu] = useState(null);
   
   const scrollRef = useRef(null);
-  const longPressTimer = useRef(null);
   const prevMsgCountRef = useRef(0);
 
   const scrollToBottom = useCallback((behavior = 'auto') => {
@@ -72,29 +71,10 @@ export default function AdminPage() {
     });
   }, [guests, messages]);
 
-  const executeDelete = async (msg) => {
-    if (!confirm("このメッセージを削除しますか？")) return;
-    const { error } = await supabase.from('messages')
-      .delete()
-      .eq('id', msg.id);
-
-    if (!error) {
-      setContextMenu(null);
-      fetchMessages();
-    }
-  };
-
-  const openMenu = (e, msg) => {
-    e.preventDefault();
-    const x = e.clientX || (e.touches && e.touches[0].clientX);
-    const y = e.clientY || (e.touches && e.touches[0].clientY);
-    setContextMenu({ x, y, msg });
-  };
-
   const renderMessages = () => {
     const filtered = (viewMode === 'DIRECT' 
       ? messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId))
-      : messages // Globalモード時は重複排除せず全て表示
+      : messages
     );
 
     return (
@@ -121,11 +101,8 @@ export default function AdminPage() {
                     {!isMe && viewMode === 'GLOBAL' && (
                       <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>{senderProfile?.username || 'Guest'}</span>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                    <div style={{ display: 'flex', alignItems: 'end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
                       <div 
-                        onContextMenu={(e) => openMenu(e, m)} 
-                        onTouchStart={(e) => { longPressTimer.current = setTimeout(() => openMenu(e, m), 600); }} 
-                        onTouchEnd={() => clearTimeout(longPressTimer.current)}
                         style={{ 
                           padding: m.is_image ? '5px' : '10px 14px', 
                           background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
@@ -148,15 +125,7 @@ export default function AdminPage() {
   };
 
   return (
-    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif' }}>
-      {/* 操作メニュー */}
-      {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
-          <button type="button" style={{ background: 'none', border: 'none', color: '#fff', padding: '15px 25px', borderBottom: '1px solid #333' }} onClick={() => { if(contextMenu.msg.content) navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
-          <button type="button" style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '15px 25px' }} onClick={() => executeDelete(contextMenu.msg)}>削除</button>
-        </div>
-      )}
-
+    <div style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif' }}>
       <header style={{ padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
         <h1 style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: 0, letterSpacing: '2px' }}>for VAU - MONITORING</h1>
         <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px' }}>
