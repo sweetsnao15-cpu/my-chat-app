@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '../../lib/supabase';
+// app/page.js の3行目を修正
+import { supabase } from '../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
