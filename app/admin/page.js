@@ -26,6 +26,7 @@ export default function AdminPage() {
   const [inputText, setInputText] = useState('');
   const [user, setUser] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+  const [isSending, setIsSending] = useState(false); // 送信中フラグ追加
   
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
@@ -75,17 +76,20 @@ export default function AdminPage() {
     });
   }, [guests, messages]);
 
+  // ★送信ロジックの改善（一括処理）
   const handleSendAll = async (e) => {
     if (e) {
-      if (typeof e.preventDefault === 'function') e.preventDefault();
-      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      e.preventDefault();
+      e.stopPropagation();
     }
 
     const text = inputText.trim();
-    if (!text || !user) return;
+    if (!text || isSending || !user) return;
 
     const targetIds = guests.filter(g => g.id !== ADMIN_ID).map(g => g.id);
     if (targetIds.length === 0) return;
+
+    setIsSending(true); // 二重送信防止
 
     const inserts = targetIds.map(id => ({
       content: text,
@@ -95,16 +99,23 @@ export default function AdminPage() {
       is_read: false
     }));
 
-    // 送信直後のUIフィードバック
+    // 入力欄を先にクリア（サクサク感を出す）
     setInputText('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.blur(); // スマホのキーボードを閉じる
+      textareaRef.current.blur();
     }
 
-    const { error } = await supabase.from('messages').insert(inserts);
-    if (!error) {
-      fetchMessages();
+    try {
+      const { error } = await supabase.from('messages').insert(inserts);
+      if (error) throw error;
+      await fetchMessages();
+    } catch (err) {
+      console.error("Send Error:", err);
+      alert("送信に失敗しました。電波の良い場所で再度お試しください。");
+      setInputText(text); // 失敗したら文字を戻す
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -195,93 +206,71 @@ export default function AdminPage() {
   };
 
   return (
-    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none' }}>
-      {contextMenu && viewMode === 'GLOBAL' && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
-          <button type="button" style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { if(contextMenu.msg.content) navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
-          <button type="button" style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left' }} onClick={() => executeDelete(contextMenu.msg)}>送信取消</button>
+    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif' }}>
+      {contextMenu && (
+        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column' }}>
+          <button type="button" style={{ background: 'none', border: 'none', color: '#fff', padding: '15px 25px', borderBottom: '1px solid #333' }} onClick={() => { if(contextMenu.msg.content) navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
+          <button type="button" style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '15px 25px' }} onClick={() => executeDelete(contextMenu.msg)}>送信取消</button>
         </div>
       )}
 
-      <header style={{ padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0, zIndex: 10 }}>
-        <h1 style={{ fontSize: '1.4rem', fontStyle: 'italic', fontWeight: 'bold', margin: 0, letterSpacing: '2px' }}>for VAU - HOST</h1>
+      <header style={{ padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0 }}>
+        <h1 style={{ fontSize: '1.2rem', fontWeight: 'bold', margin: 0 }}>for VAU - HOST</h1>
         <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center', gap: '15px' }}>
           {['GLOBAL', 'DIRECT'].map(mode => (
-            <button key={mode} type="button" onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '6px 20px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold' }}>{mode}</button>
+            <button key={mode} type="button" onClick={() => setViewMode(mode)} style={{ background: viewMode === mode ? '#D4AF37' : 'transparent', color: viewMode === mode ? '#000' : '#fff', border: '1px solid #D4AF37', padding: '6px 15px', borderRadius: '20px', fontSize: '0.7rem' }}>{mode}</button>
           ))}
         </div>
       </header>
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
         {viewMode === 'DIRECT' && (
-          <div style={{ width: '85px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '25px', padding: '20px 0', flexShrink: 0 }}>
+          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0' }}>
             {sortedGuests.map(g => (
-              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <Avatar profile={g} size="50px" isSelected={selectedGuestId === g.id} />
-                <div style={{ fontSize: '0.6rem', color: selectedGuestId === g.id ? '#D4AF37' : '#888', marginTop: '8px', textAlign: 'center', width: '90%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.username || 'Guest'}</div>
+              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
               </div>
             ))}
           </div>
         )}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#050505', position: 'relative' }}>
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', paddingBottom: '100px' }}>{renderMessages()}</div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#050505' }}>
+          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>{renderMessages()}</div>
           
+          {/* ★スマホ対応入力エリア */}
           {viewMode === 'GLOBAL' && (
             <div style={{ 
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              padding: '12px 15px', 
+              padding: '12px', 
               background: '#800000', 
-              borderTop: '1px solid #D4AF37', 
-              zIndex: 100,
+              borderTop: '1px solid #D4AF37',
               paddingBottom: 'calc(12px + env(safe-area-inset-bottom))'
             }}>
-              <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '10px' }}>
                 <textarea 
                   ref={textareaRef}
                   value={inputText} 
                   onChange={e => setInputText(e.target.value)} 
-                  placeholder="全員へメッセージ..." 
+                  placeholder="全員へ送信..." 
                   rows={1} 
-                  onInput={(e) => {
-                    e.target.style.height = 'auto';
-                    e.target.style.height = e.target.scrollHeight + 'px';
-                  }} 
                   style={{ 
-                    flex: 1, 
-                    background: 'rgba(0,0,0,0.3)', 
-                    color: '#fff', 
-                    border: '1px solid rgba(255,255,255,0.2)', 
-                    borderRadius: '20px', 
-                    padding: '10px 15px', 
-                    resize: 'none', 
-                    fontSize: '16px', // iOSでの自動ズームを防止
-                    outline: 'none',
-                    lineHeight: '1.2'
+                    flex: 1, background: '#000', color: '#fff', border: '1px solid #D4AF37', 
+                    borderRadius: '20px', padding: '10px 15px', fontSize: '16px', resize: 'none', outline: 'none'
                   }} 
                 />
                 <button 
                   type="button" 
+                  disabled={isSending || !inputText.trim()}
                   onPointerDown={(e) => {
-                    if (inputText.trim()) {
-                      handleSendAll(e);
-                    }
+                    // pointerDownなら瞬時に反応する
+                    if (inputText.trim() && !isSending) handleSendAll(e);
                   }}
                   style={{ 
-                    background: '#000', 
-                    color: '#D4AF37', 
-                    padding: '12px 20px', 
-                    borderRadius: '20px', 
-                    fontWeight: 'bold', 
-                    border: '1px solid #D4AF37', 
-                    fontSize: '14px',
-                    minWidth: '80px',
-                    touchAction: 'manipulation' // タップ判定の高速化
+                    background: isSending ? '#333' : '#000', 
+                    color: isSending ? '#666' : '#D4AF37', 
+                    padding: '0 20px', borderRadius: '20px', fontWeight: 'bold', 
+                    border: '1px solid #D4AF37', minWidth: '70px'
                   }}
                 >
-                  SEND
+                  {isSending ? '...' : 'SEND'}
                 </button>
               </div>
             </div>
