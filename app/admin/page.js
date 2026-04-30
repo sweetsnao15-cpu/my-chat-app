@@ -4,7 +4,6 @@ import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-// アバターコンポーネント
 const Avatar = ({ profile, size = '32px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
@@ -18,11 +17,7 @@ const Avatar = ({ profile, size = '32px', isSelected = true }) => {
           src={profile.avatar_url} 
           onContextMenu={(e) => e.preventDefault()}
           onDragStart={(e) => e.preventDefault()}
-          style={{ 
-            width: '100%', height: '100%', borderRadius: '50%', 
-            objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444',
-            pointerEvents: 'none' 
-          }} 
+          style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444', pointerEvents: 'none' }} 
           alt="" 
         />
       ) : (
@@ -39,6 +34,7 @@ export default function AdminPage() {
   const [messages, setMessages] = useState([]);
   const [longPressedGuestId, setLongPressedGuestId] = useState(null);
   const [blockedIds, setBlockedIds] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const scrollRef = useRef(null);
   const pressTimerRef = useRef(null);
@@ -47,39 +43,51 @@ export default function AdminPage() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, []);
 
-  const fetchMessages = useCallback(async () => {
+  const fetchInitialData = useCallback(async () => {
     const { data: blockData } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', ADMIN_ID);
     const currentBlocked = blockData?.map(b => b.blocked_id) || [];
     setBlockedIds(currentBlocked);
+
+    const { data: profiles } = await supabase.from('profiles').select('*');
+    if (profiles) setGuests(profiles);
+
     let query = supabase.from('messages').select('*');
     if (currentBlocked.length > 0) {
       query = query.not('user_id', 'in', `(${currentBlocked.join(',')})`).not('receiver_id', 'in', `(${currentBlocked.join(',')})`);
     }
-    const { data } = await query.order('created_at', { ascending: true });
-    if (data) setMessages(data);
-  }, []);
-
-  const fetchGuests = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('*');
-    if (data) setGuests(data);
+    const { data: msgs } = await query.order('created_at', { ascending: true });
+    if (msgs) setMessages(msgs);
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchGuests(); fetchMessages();
-    const channel = supabase.channel('admin_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, () => fetchMessages())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchGuests, fetchMessages]);
+    fetchInitialData();
 
-  useEffect(() => { scrollToBottomInstant(); }, [viewMode, selectedGuestId, messages, scrollToBottomInstant]);
+    // リアルタイム購読の強化
+    const channel = supabase.channel('realtime_admin')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setMessages(prev => [...prev, payload.new]);
+        } else {
+          fetchInitialData();
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, () => {
+        fetchInitialData();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchInitialData]);
+
+  useEffect(() => {
+    if (!isLoading) scrollToBottomInstant();
+  }, [viewMode, selectedGuestId, messages, isLoading, scrollToBottomInstant]);
 
   const handleBlockUser = async (targetId) => {
     if (!confirm("このユーザーをブロックしますか？")) return;
     const { error } = await supabase.from('blocks').insert([{ blocker_id: ADMIN_ID, blocked_id: targetId }]);
-    if (error) alert("失敗しました。");
-    else { setLongPressedGuestId(null); fetchMessages(); }
+    if (!error) { setLongPressedGuestId(null); fetchInitialData(); }
   };
 
   const startPress = (guestId) => {
@@ -88,7 +96,6 @@ export default function AdminPage() {
       if (window.navigator.vibrate) window.navigator.vibrate(50);
     }, 600);
   };
-
   const cancelPress = () => { if (pressTimerRef.current) clearTimeout(pressTimerRef.current); };
 
   const filteredGuests = useMemo(() => {
@@ -101,6 +108,7 @@ export default function AdminPage() {
   }, [guests, messages, blockedIds]);
 
   const renderMessages = () => {
+    if (isLoading) return null;
     const filtered = (viewMode === 'DIRECT' 
       ? messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId))
       : messages
@@ -123,7 +131,6 @@ export default function AdminPage() {
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  {/* GLOBALページでアイコンを少し大きく(32px) */}
                   {!isMe && viewMode !== 'DIRECT' && <Avatar profile={senderProfile} size="32px" />}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1 }}>
                     {!isMe && viewMode === 'GLOBAL' && (
@@ -133,14 +140,9 @@ export default function AdminPage() {
                     )}
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
                       <div style={{ 
-                        padding: m.is_image ? '5px' : '10px 14px', 
-                        background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
-                        borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                        border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
-                        fontSize: '0.9rem', color: '#fff',
-                        whiteSpace: 'pre-wrap', // 改行を反映
-                        wordBreak: 'break-word',
-                        fontFamily: 'serif'
+                        padding: m.is_image ? '5px' : '10px 14px', background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
+                        borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
+                        fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'serif'
                       }}>
                         {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', pointerEvents: 'none' }} onContextMenu={(e)=>e.preventDefault()} /> : m.content}
                       </div>
@@ -166,19 +168,21 @@ export default function AdminPage() {
         WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' 
       }}
     >
-      <header style={{ padding: '20px', background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'center', zIndex: 100 }}>
-        <h1 style={{ margin: 0, fontFamily: 'serif', fontWeight: 'normal', letterSpacing: '2px' }}>
-          <span style={{ fontSize: '1.8rem', fontStyle: 'italic', color: '#fff' }}>for VAU</span>
-          <span style={{ fontSize: '1.2rem', color: '#D4AF37', marginLeft: '10px', verticalAlign: 'middle' }}>-HOST-</span>
+      <header style={{ 
+        padding: '20px', paddingLeft: '40px', // 全体を少し右にずらす
+        background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'left', zIndex: 100 
+      }}>
+        <h1 style={{ margin: 0, fontFamily: 'serif', fontWeight: 'normal', letterSpacing: '2px', display: 'flex', alignItems: 'flex-end' }}>
+          <span style={{ fontSize: '1.8rem', fontStyle: 'italic', color: '#fff', marginBottom: '-3px' }}>for VAU</span>
+          <span style={{ fontSize: '1.2rem', color: '#D4AF37', marginLeft: '12px' }}>-HOST-</span>
         </h1>
       </header>
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
         {viewMode === 'DIRECT' && (
           <div style={{ 
-            width: '85px', borderRight: '1px solid #222', 
-            overflowY: 'auto', overflowX: 'visible', // ボタンがはみ出せるようにする
-            display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0' 
+            width: '85px', borderRight: '1px solid #222', overflowY: 'auto', overflowX: 'visible',
+            display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', zIndex: 20
           }}>
             {filteredGuests.map(g => (
               <div 
@@ -196,9 +200,9 @@ export default function AdminPage() {
                     onClick={(e) => { e.stopPropagation(); handleBlockUser(g.id); }} 
                     style={{ 
                       position: 'absolute', left: '65px', top: '50%', transform: 'translateY(-50%)',
-                      zIndex: 10000, background: '#ff4444', color: '#fff', border: '2px solid #fff', 
+                      zIndex: 99999, background: '#ff4444', color: '#fff', border: '2px solid #fff', 
                       borderRadius: '8px', padding: '10px 15px', fontSize: '0.8rem', fontWeight: 'bold', 
-                      whiteSpace: 'nowrap', boxShadow: '0 4px 15px rgba(0,0,0,0.5)', fontFamily: 'serif'
+                      whiteSpace: 'nowrap', boxShadow: '0 4px 15px rgba(0,0,0,0.8)', fontFamily: 'serif'
                     }}
                   >
                     ブロック
@@ -208,7 +212,7 @@ export default function AdminPage() {
             ))}
           </div>
         )}
-        <div style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px' }} ref={scrollRef}>
+        <div style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px', zIndex: 1 }} ref={scrollRef}>
           {renderMessages()}
         </div>
       </div>
@@ -219,15 +223,9 @@ export default function AdminPage() {
             key={mode} 
             onClick={() => setViewMode(mode)} 
             style={{ 
-              background: 'transparent', 
-              color: viewMode === mode ? '#D4AF37' : '#fff', 
-              border: 'none', 
-              fontWeight: 'bold', 
-              fontFamily: 'serif',
-              fontSize: '1.1rem',
-              letterSpacing: '2px',
-              borderBottom: viewMode === mode ? '2px solid #D4AF37' : 'none',
-              paddingBottom: '5px'
+              background: 'transparent', color: viewMode === mode ? '#D4AF37' : '#fff', 
+              border: 'none', fontWeight: 'bold', fontFamily: 'serif', fontSize: '1.1rem', letterSpacing: '2px',
+              borderBottom: viewMode === mode ? '2px solid #D4AF37' : 'none', paddingBottom: '5px'
             }}
           >
             {mode}
