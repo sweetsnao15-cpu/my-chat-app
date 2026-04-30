@@ -10,7 +10,8 @@ const Avatar = ({ profile, size = '32px', isSelected = true }) => {
     <div style={{ 
       position: 'relative', width: size, height: size, 
       opacity: isSelected ? 1 : 0.6, flexShrink: 0,
-      WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'
+      WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none',
+      WebkitTapHighlightColor: 'transparent' // 青いハイライト防止
     }}>
       {profile?.avatar_url ? (
         <img 
@@ -57,32 +58,36 @@ export default function AdminPage() {
     }
     const { data: msgs } = await query.order('created_at', { ascending: true });
     
-    // 更新時のチラつきを防ぐため、データをセットしてからLoadingを解除
     if (msgs) setMessages(msgs);
     setIsLoading(false);
   }, []);
 
   useEffect(() => {
-    setIsLoading(true); // 初回ロード開始
     fetchInitialData();
-    const channel = supabase.channel('realtime_admin')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setMessages(prev => [...prev, payload.new]);
-        } else {
-          fetchInitialData();
-        }
+    const channel = supabase.channel('chat_realtime_sync')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        setMessages(prev => {
+          if (prev.some(m => m.id === payload.new.id)) return prev;
+          return [...prev, payload.new];
+        });
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
+        setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
+        setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, () => {
         fetchInitialData();
       })
       .subscribe();
+
     return () => { supabase.removeChannel(channel); };
   }, [fetchInitialData]);
 
   useEffect(() => {
     if (!isLoading) scrollToBottomInstant();
-  }, [viewMode, selectedGuestId, messages, isLoading, scrollToBottomInstant]);
+  }, [messages, isLoading, viewMode, selectedGuestId, scrollToBottomInstant]);
 
   const handleBlockUser = async (targetId) => {
     if (!confirm("このユーザーをブロックしますか？")) return;
@@ -108,7 +113,7 @@ export default function AdminPage() {
   }, [guests, messages, blockedIds]);
 
   const renderMessages = () => {
-    if (isLoading) return <div style={{ flex: 1, background: '#050505' }} />; // ロード中は何も表示しない
+    if (isLoading) return <div style={{ flex: 1, background: '#050505' }} />;
     const filtered = (viewMode === 'DIRECT' 
       ? messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId))
       : messages
@@ -123,7 +128,7 @@ export default function AdminPage() {
           const isNewDay = index === 0 || new Date(filtered[index - 1].created_at).toDateString() !== date.toDateString();
 
           return (
-            <div key={m.id}>
+            <div key={m.id} style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
               {isNewDay && (
                 <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
                   <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontFamily: 'serif' }}>-{date.toLocaleDateString()}-</div>
@@ -131,7 +136,6 @@ export default function AdminPage() {
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  {/* アイコンサイズを38pxに拡大 */}
                   {!isMe && viewMode !== 'DIRECT' && <Avatar profile={senderProfile} size="38px" />}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1 }}>
                     {!isMe && viewMode === 'GLOBAL' && (
@@ -148,14 +152,7 @@ export default function AdminPage() {
                         {m.is_image ? (
                           <img 
                             src={m.content} 
-                            style={{ 
-                              maxWidth: '100%', 
-                              borderRadius: '10px', 
-                              pointerEvents: 'auto', 
-                              WebkitTouchCallout: 'default', 
-                              WebkitUserSelect: 'auto', 
-                              userSelect: 'auto' 
-                            }} 
+                            style={{ maxWidth: '100%', borderRadius: '10px' }} 
                             alt="Message"
                           />
                         ) : m.content}
@@ -179,15 +176,18 @@ export default function AdminPage() {
       style={{ 
         width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
         background: '#000', color: '#fff', overflow: 'hidden',
-        WebkitTapHighlightColor: 'transparent' // 青い選択枠を消す
+        WebkitTapHighlightColor: 'transparent', // 青い枠を防止
+        WebkitUserSelect: 'none', userSelect: 'none' // テキスト選択を防止
       }}
     >
       <header style={{ 
-        padding: '20px', paddingLeft: '22%', // 真ん中より少し右に配置
-        background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'left', zIndex: 100,
-        WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' 
+        padding: '20px 20px 20px 30%', // 左の余白をさらに右へ（22% -> 30%）
+        background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'left', zIndex: 100
       }}>
-        <h1 style={{ margin: 0, fontFamily: 'serif', fontWeight: 'normal', letterSpacing: '2px', display: 'flex', alignItems: 'flex-end' }}>
+        <h1 style={{ 
+          margin: 0, marginLeft: '10px', // さらに微調整用のマージン
+          fontFamily: 'serif', fontWeight: 'normal', letterSpacing: '2px', display: 'flex', alignItems: 'flex-end' 
+        }}>
           <span style={{ fontSize: '1.8rem', fontStyle: 'italic', color: '#fff', marginBottom: '-3px' }}>for VAU</span>
           <span style={{ fontSize: '1.2rem', color: '#D4AF37', marginLeft: '12px' }}>-HOST-</span>
         </h1>
@@ -197,8 +197,7 @@ export default function AdminPage() {
         {viewMode === 'DIRECT' && (
           <div style={{ 
             width: '85px', borderRight: '1px solid #222', overflowY: 'auto', overflowX: 'visible',
-            display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', zIndex: 20,
-            WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' 
+            display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', zIndex: 20
           }}>
             {filteredGuests.map(g => (
               <div 
@@ -206,10 +205,9 @@ export default function AdminPage() {
                 onMouseDown={() => startPress(g.id)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
                 onTouchStart={() => startPress(g.id)} onTouchEnd={cancelPress}
                 onClick={(e) => { e.stopPropagation(); setSelectedGuestId(g.id); }}
-                style={{ position: 'relative', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}
+                style={{ position: 'relative', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', WebkitTapHighlightColor: 'transparent' }}
               >
                 <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
-                {/* ゲスト名を中央揃えに */}
                 <div style={{ fontSize: '0.6rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px', fontFamily: 'serif', textAlign: 'center', width: '100%', padding: '0 4px' }}>
                   {g.username?.substring(0, 6)}
                 </div>
@@ -221,7 +219,8 @@ export default function AdminPage() {
                       position: 'absolute', left: '65px', top: '50%', transform: 'translateY(-50%)',
                       zIndex: 99999, background: '#800020', color: '#fff', border: '1px solid #D4AF37', 
                       borderRadius: '8px', padding: '10px 15px', fontSize: '0.8rem', fontWeight: 'bold', 
-                      whiteSpace: 'nowrap', boxShadow: '0 4px 15px rgba(0,0,0,0.8)', fontFamily: 'serif'
+                      whiteSpace: 'nowrap', boxShadow: '0 4px 15px rgba(0,0,0,0.8)', fontFamily: 'serif',
+                      WebkitTapHighlightColor: 'transparent'
                     }}
                   >
                     ブロック
@@ -232,9 +231,7 @@ export default function AdminPage() {
           </div>
         )}
         <div 
-          style={{ 
-            flex: 1, background: '#050505', overflowY: 'auto', padding: '15px', zIndex: 1
-          }} 
+          style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px', zIndex: 1 }} 
           ref={scrollRef}
         >
           {renderMessages()}
@@ -242,8 +239,7 @@ export default function AdminPage() {
       </div>
 
       <footer style={{ 
-        padding: '15px', background: '#800020', borderTop: '1px solid #D4AF37', display: 'flex', justifyContent: 'center', gap: '40px', zIndex: 100,
-        WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' 
+        padding: '15px', background: '#800020', borderTop: '1px solid #D4AF37', display: 'flex', justifyContent: 'center', gap: '40px', zIndex: 100
       }}>
         {['GLOBAL', 'DIRECT'].map(mode => (
           <button 
@@ -252,7 +248,8 @@ export default function AdminPage() {
             style={{ 
               background: 'transparent', color: viewMode === mode ? '#D4AF37' : '#fff', 
               border: 'none', fontWeight: 'bold', fontFamily: 'serif', fontSize: '1.1rem', letterSpacing: '2px',
-              borderBottom: viewMode === mode ? '2px solid #D4AF37' : 'none', paddingBottom: '5px'
+              borderBottom: viewMode === mode ? '2px solid #D4AF37' : 'none', paddingBottom: '5px',
+              cursor: 'pointer', outline: 'none', WebkitTapHighlightColor: 'transparent'
             }}
           >
             {mode}
