@@ -1,21 +1,29 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
-export default function AdminPage() {
-  const [messages, setMessages] = useState([]);
-  const [inputText, setInputText] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [contextMenu, setContextMenu] = useState(null);
-  const [deletedIds, setDeletedIds] = useState([]);
-  const [isUploading, setIsUploading] = useState(false);
+const Avatar = ({ profile, size = '32px', isSelected = true }) => {
+  const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
+  return (
+    <div style={{ position: 'relative', width: size, height: size, opacity: isSelected ? 1 : 0.6, flexShrink: 0 }}>
+      {profile?.avatar_url ? (
+        <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444' }} alt="" />
+      ) : (
+        <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.7rem', border: '1px solid #D4AF37' }}>{initial}</div>
+      )}
+    </div>
+  );
+};
 
+export default function AdminPage() {
+  const [viewMode, setViewMode] = useState('GLOBAL');
+  const [guests, setGuests] = useState([]);
+  const [selectedGuestId, setSelectedGuestId] = useState(null);
+  const [messages, setMessages] = useState([]);
+  
   const scrollRef = useRef(null);
-  const chatFileInputRef = useRef(null);
-  const textareaRef = useRef(null);
-  const longPressTimer = useRef(null);
   const prevMsgCountRef = useRef(0);
 
   const scrollToBottom = useCallback((behavior = 'auto') => {
@@ -24,194 +32,159 @@ export default function AdminPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchMessages();
-    const channel = supabase.channel('admin_room')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
-      .subscribe();
-    setLoading(false);
-    return () => { supabase.removeChannel(channel); };
+  const fetchGuests = useCallback(async () => {
+    const { data } = await supabase.from('profiles').select('*');
+    if (data) setGuests(data);
+  }, []);
+
+  const fetchMessages = useCallback(async () => {
+    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
+    if (data) setMessages(data);
   }, []);
 
   useEffect(() => {
+    fetchGuests();
+    fetchMessages();
+    const channel = supabase.channel('admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchGuests, fetchMessages]);
+
+  useEffect(() => { 
     if (messages.length > prevMsgCountRef.current) {
-      requestAnimationFrame(() => scrollToBottom('auto'));
+      scrollToBottom('auto');
     }
     prevMsgCountRef.current = messages.length;
-  }, [messages, scrollToBottom]);
+  }, [messages.length, scrollToBottom]);
 
-  const fetchMessages = async () => {
-    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
-    if (data) setMessages(data);
-  };
+  const sortedGuests = useMemo(() => {
+    const guestList = guests.filter(g => g.id !== ADMIN_ID);
+    return guestList.sort((a, b) => {
+      const lastMsgA = [...messages].reverse().find(m => m.user_id === a.id || m.receiver_id === a.id);
+      const lastMsgB = [...messages].reverse().find(m => m.user_id === b.id || m.receiver_id === b.id);
+      return (lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0) - (lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0);
+    });
+  }, [guests, messages]);
 
-  const handleSend = async (content, isImage = false, receiverId = null) => {
-    const text = content?.trim();
-    if (!text) return;
-    const { error } = await supabase.from('messages').insert([{ 
-      content: text, 
-      user_id: ADMIN_ID, 
-      receiver_id: receiverId, 
-      is_image: isImage, 
-      is_read: false 
-    }]);
-    if (!error) {
-      if (!isImage) {
-        setInputText('');
-        if (textareaRef.current) textareaRef.current.style.height = 'auto';
-      }
-      fetchMessages();
-    }
-  };
+  const renderMessages = () => {
+    const filtered = (viewMode === 'DIRECT' 
+      ? messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId))
+      : messages
+    );
 
-  const handleChatImageUpload = async (e, receiverId) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploading(true);
-    const filePath = `chat/admin/${Date.now()}_${file.name}`;
-    const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, file);
-    if (!uploadError) {
-      const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-      await handleSend(publicUrl, true, receiverId);
-    }
-    setIsUploading(false);
-  };
+    return (
+      <div style={{ maxWidth: '600px', margin: '0 auto', width: '100%', paddingBottom: '20px' }}>
+        {filtered.map((m, index) => {
+          const isMe = m.user_id === ADMIN_ID;
+          const senderProfile = guests.find(g => g.id === m.user_id);
+          const date = new Date(m.created_at);
+          const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
+          const prevMsg = index > 0 ? filtered[index - 1] : null;
+          const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
 
-  const openMenu = (e, msg) => {
-    e.preventDefault();
-    const x = e.clientX || (e.touches && e.touches[0].clientX);
-    const y = e.clientY || (e.touches && e.touches[0].clientY);
-    setContextMenu({ x, y, msg });
-  };
-
-  const handleTouchStart = (e, msg) => { longPressTimer.current = setTimeout(() => openMenu(e, msg), 600); };
-  const handleTouchEnd = () => clearTimeout(longPressTimer.current);
-
-  if (loading) return <div style={{ height: '100dvh', background: '#000' }} />;
-
-  return (
-    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none' }}>
-      
-      {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
-          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
-          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}>削除</button>
-          <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left' }} onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}>送信取消</button>
-        </div>
-      )}
-
-      <header style={{ 
-        padding: '40px 15px 20px', 
-        background: '#4a0000', 
-        borderBottom: '1px solid #D4AF37', 
-        display: 'flex', 
-        alignItems: 'flex-end', 
-        justifyContent: 'center', 
-        position: 'relative', 
-        flexShrink: 0, 
-        zIndex: 10,
-        minHeight: '110px'
-      }}>
-        <span style={{ 
-          fontSize: '2.2rem', 
-          fontStyle: 'italic', 
-          fontWeight: 'bold', 
-          letterSpacing: '4px', 
-          color: '#fff', 
-          textAlign: 'center',
-          lineHeight: '1.2'
-        }}>
-          for VAU <span style={{ fontSize: '1.2rem', verticalAlign: 'middle', marginLeft: '5px' }}>-HOST-</span>
-        </span>
-      </header>
-
-      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', background: '#050505' }}>
-        <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '20px' }}>
-          {messages.filter(m => !deletedIds.includes(m.id)).map((m) => {
-            const isMe = m.user_id === ADMIN_ID;
-            const date = new Date(m.created_at);
-            const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-            
-            return (
-              <div key={m.id} style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '85%' }}>
-                  <div 
-                    onContextMenu={(e) => !m.is_image && openMenu(e, m)}
-                    onTouchStart={(e) => !m.is_image && handleTouchStart(e, m)}
-                    onTouchEnd={() => !m.is_image && handleTouchEnd()}
-                    style={{ 
-                      padding: m.is_image ? '5px' : '12px 16px', 
-                      background: 'rgba(0, 0, 0, 0.5)', 
-                      backdropFilter: 'blur(4px)', 
-                      borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                      border: '1px solid #D4AF37', 
-                      fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
-                    }}
-                  >
-                    {m.is_image ? (
-                      <img 
-                        src={m.content} 
-                        onLoad={() => scrollToBottom('auto')} 
-                        onContextMenu={(e) => e.stopPropagation()} 
-                        onTouchStart={(e) => e.stopPropagation()}
-                        style={{ 
-                          maxWidth: '100%', 
-                          borderRadius: '10px', 
-                          display: 'block',
-                          WebkitUserSelect: 'auto',
-                          userSelect: 'auto',
-                          pointerEvents: 'auto' 
-                        }} 
-                      />
-                    ) : (
-                      m.content
-                    )}
+          return (
+            <div key={m.id}>
+              {isNewDay && (
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
+                  <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic' }}>
+                    {dateStr}
                   </div>
-                  <div style={{ fontSize: '0.55rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px' }}>{timeStr}</div>
+                </div>
+              )}
+              <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
+                  {!isMe && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="28px" /></div>}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                    {!isMe && viewMode === 'GLOBAL' && (
+                      <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>{senderProfile?.username || 'Guest'}</span>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                      <div 
+                        style={{ 
+                          padding: m.is_image ? '5px' : '10px 14px', 
+                          background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
+                          borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
+                          border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
+                          fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                          WebkitUserSelect: 'none', userSelect: 'none'
+                        }}>
+                        {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
+                      </div>
+                      <div style={{ fontSize: '0.5rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px', opacity: 0.8 }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ 
+      width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
+      background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
+      WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'
+    }}>
+      {/* ゲスト側と同じ高さのヘッダー */}
+      <header style={{ 
+        padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', 
+        textAlign: 'center', flexShrink: 0, zIndex: 10
+      }}>
+        <h1 style={{ 
+          fontSize: '1.2rem', fontStyle: 'italic', fontWeight: 'bold', 
+          margin: 0, letterSpacing: '2px', color: '#fff' 
+        }}>
+          for VAU ｰHOSTｰ
+        </h1>
+      </header>
+
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {viewMode === 'DIRECT' && (
+          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
+            {sortedGuests.map(g => (
+              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
+                <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px' }}>{g.username?.substring(0, 5)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px' }} ref={scrollRef}>
+          {renderMessages()}
         </div>
       </div>
 
-      <div style={{ padding: '12px 15px', background: '#4a0000', borderTop: '1px solid #D4AF37', flexShrink: 0, paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
-        <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
-          <button
-            onClick={() => chatFileInputRef.current?.click()}
-            disabled={isUploading}
+      {/* ゲスト側と同じ高さのフッター */}
+      <footer style={{ 
+        padding: '12px 15px', background: '#800000', borderTop: '1px solid #D4AF37', 
+        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px',
+        paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
+        flexShrink: 0, zIndex: 10
+      }}>
+        {['GLOBAL', 'DIRECT'].map(mode => (
+          <button 
+            key={mode} 
+            onClick={() => setViewMode(mode)} 
             style={{ 
-              background: '#000', border: '1px solid #D4AF37', borderRadius: '50%', 
-              width: '42px', height: '42px', display: 'flex', alignItems: 'center', 
-              justifyContent: 'center', cursor: 'pointer', flexShrink: 0
+              background: 'transparent', 
+              color: viewMode === mode ? '#D4AF37' : 'rgba(255,255,255,0.6)', 
+              border: 'none', 
+              fontSize: '0.75rem', 
+              fontWeight: 'bold', 
+              letterSpacing: '2px',
+              padding: '5px 10px',
+              borderBottom: viewMode === mode ? '1px solid #D4AF37' : '1px solid transparent',
+              transition: 'all 0.2s ease'
             }}
           >
-            {isUploading ? <span style={{ color: '#D4AF37', fontSize: '0.6rem' }}>...</span> : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
-              </svg>
-            )}
+            {mode}
           </button>
-          <input type="file" ref={chatFileInputRef} hidden accept="image/*" onChange={(e) => handleChatImageUpload(e, messages[0]?.user_id)} />
-
-          <textarea 
-            ref={textareaRef}
-            value={inputText} 
-            onChange={e => setInputText(e.target.value)} 
-            placeholder="MESSAGES..." 
-            rows={1} 
-            onInput={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} 
-            style={{ flex: 1, background: 'rgba(0,0,0,0.4)', color: '#fff', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '22px', padding: '10px 18px', resize: 'none', fontSize: '16px', outline: 'none', lineHeight: '1.4', maxHeight: '120px' }} 
-          />
-          
-          <button 
-            onClick={() => handleSend(inputText, false, messages[0]?.user_id)} 
-            style={{ background: '#000', color: '#D4AF37', padding: '10px 20px', borderRadius: '22px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '0.85rem', cursor: 'pointer', height: '42px' }}
-          >
-            SEND
-          </button>
-        </div>
-      </div>
+        ))}
+      </footer>
     </div>
   );
 }
