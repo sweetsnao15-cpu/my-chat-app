@@ -97,11 +97,11 @@ export default function AdminPage() {
                   {/* DIRECTモード以外かつ自分以外の時のみアイコンを表示 */}
                   {!isMe && viewMode !== 'DIRECT' && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="28px" /></div>}
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
                     {!isMe && viewMode === 'GLOBAL' && (
                       <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>{senderProfile?.username || 'Guest'}</span>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
                       <div 
                         style={{ 
                           padding: m.is_image ? '5px' : '10px 14px', 
@@ -119,7 +119,7 @@ export default function AdminPage() {
                               maxWidth: '100%', 
                               borderRadius: '10px', 
                               display: 'block',
-                              /* 画像のみ長押し保存を許可 */
+                              /* ホストが右クリック・長押しで保存できるように許可 */
                               WebkitUserSelect: 'auto',
                               userSelect: 'auto',
                               pointerEvents: 'auto'
@@ -145,7 +145,7 @@ export default function AdminPage() {
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
       WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'
     }}>
-      {/* ヘッダー：高さを上げ、ロゴを大きく調整 */}
+      {/* ヘッダー：高さを上げ、ロゴを大きく調整。-HOST-の部分を小さく */}
       <header style={{ 
         padding: '30px 15px 15px', 
         background: '#800000', 
@@ -166,7 +166,7 @@ export default function AdminPage() {
           letterSpacing: '3px', 
           color: '#fff' 
         }}>
-          for VAU ｰHOSTｰ
+          for VAU <span style={{ fontSize: '1.1rem', verticalAlign: 'middle' }}>ｰHOSTｰ</span>
         </h1>
       </header>
 
