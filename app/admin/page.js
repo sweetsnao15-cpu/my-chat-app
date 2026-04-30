@@ -26,9 +26,10 @@ export default function AdminPage() {
   const scrollRef = useRef(null);
   const prevMsgCountRef = useRef(0);
 
-  const scrollToBottom = useCallback((behavior = 'auto') => {
+  // 「ぱっと」最下部を表示させるための即時スクロール関数
+  const scrollToBottomInstant = useCallback(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior });
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, []);
 
@@ -41,10 +42,8 @@ export default function AdminPage() {
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
     if (data) {
       setMessages(data);
-      // データセット直後にスクロール（DOM更新を待つためにsetTimeoutを使用）
-      setTimeout(() => scrollToBottom('auto'), 50);
     }
-  }, [scrollToBottom]);
+  }, []);
 
   useEffect(() => {
     fetchGuests();
@@ -55,13 +54,15 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
-  // メッセージ数が増えた時（新着メッセージ受信時）の自動スクロール
-  useEffect(() => { 
-    if (messages.length > prevMsgCountRef.current) {
-      scrollToBottom('auto');
-    }
+  // 表示モード、ゲスト選択、メッセージ更新のたびに「ぱっと」最下部へ
+  useEffect(() => {
+    // 描画が完了したタイミングで即座に位置を合わせる
+    scrollToBottomInstant();
+    // DOMの更新を確実にするため2回実行
+    const timer = setTimeout(scrollToBottomInstant, 0);
     prevMsgCountRef.current = messages.length;
-  }, [messages.length, scrollToBottom]);
+    return () => clearTimeout(timer);
+  }, [viewMode, selectedGuestId, messages, scrollToBottomInstant]);
 
   const sortedGuests = useMemo(() => {
     const guestList = guests.filter(g => g.id !== ADMIN_ID);
@@ -118,7 +119,7 @@ export default function AdminPage() {
                         {m.is_image ? (
                           <img 
                             src={m.content} 
-                            onLoad={() => scrollToBottom('auto')} 
+                            onLoad={scrollToBottomInstant} 
                             style={{ 
                               maxWidth: '100%', 
                               borderRadius: '10px', 
