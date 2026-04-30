@@ -56,11 +56,14 @@ export default function AdminPage() {
       query = query.not('user_id', 'in', `(${currentBlocked.join(',')})`).not('receiver_id', 'in', `(${currentBlocked.join(',')})`);
     }
     const { data: msgs } = await query.order('created_at', { ascending: true });
+    
+    // 更新時のチラつきを防ぐため、データをセットしてからLoadingを解除
     if (msgs) setMessages(msgs);
     setIsLoading(false);
   }, []);
 
   useEffect(() => {
+    setIsLoading(true); // 初回ロード開始
     fetchInitialData();
     const channel = supabase.channel('realtime_admin')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
@@ -105,7 +108,7 @@ export default function AdminPage() {
   }, [guests, messages, blockedIds]);
 
   const renderMessages = () => {
-    if (isLoading) return null;
+    if (isLoading) return <div style={{ flex: 1, background: '#050505' }} />; // ロード中は何も表示しない
     const filtered = (viewMode === 'DIRECT' 
       ? messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId))
       : messages
@@ -128,10 +131,11 @@ export default function AdminPage() {
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  {!isMe && viewMode !== 'DIRECT' && <Avatar profile={senderProfile} size="32px" />}
+                  {/* アイコンサイズを38pxに拡大 */}
+                  {!isMe && viewMode !== 'DIRECT' && <Avatar profile={senderProfile} size="38px" />}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1 }}>
                     {!isMe && viewMode === 'GLOBAL' && (
-                      <span style={{ fontSize: '0.8rem', color: '#D4AF37', marginBottom: '4px', fontFamily: 'serif', fontWeight: 'bold' }}>
+                      <span style={{ fontSize: '0.95rem', color: '#D4AF37', marginBottom: '6px', fontFamily: 'serif', fontWeight: 'bold' }}>
                         {senderProfile?.username || 'Guest'}
                       </span>
                     )}
@@ -147,7 +151,6 @@ export default function AdminPage() {
                             style={{ 
                               maxWidth: '100%', 
                               borderRadius: '10px', 
-                              // 保存を可能にするための設定
                               pointerEvents: 'auto', 
                               WebkitTouchCallout: 'default', 
                               WebkitUserSelect: 'auto', 
@@ -171,17 +174,16 @@ export default function AdminPage() {
 
   return (
     <div 
-      // 背景部分のクリックではブロック解除を維持
       onClick={() => setLongPressedGuestId(null)} 
-      // 全体の右クリック禁止を解除し、メッセージ内の画像でメニューを出せるようにする
-      // ただしサイドバーなどは個別に禁止を維持
+      onContextMenu={(e) => e.preventDefault()}
       style={{ 
         width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
-        background: '#000', color: '#fff', overflow: 'hidden'
+        background: '#000', color: '#fff', overflow: 'hidden',
+        WebkitTapHighlightColor: 'transparent' // 青い選択枠を消す
       }}
     >
       <header style={{ 
-        padding: '20px', paddingLeft: '40px', 
+        padding: '20px', paddingLeft: '22%', // 真ん中より少し右に配置
         background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'left', zIndex: 100,
         WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' 
       }}>
@@ -207,14 +209,17 @@ export default function AdminPage() {
                 style={{ position: 'relative', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}
               >
                 <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
-                <div style={{ fontSize: '0.6rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px', fontFamily: 'serif' }}>{g.username?.substring(0, 5)}</div>
+                {/* ゲスト名を中央揃えに */}
+                <div style={{ fontSize: '0.6rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px', fontFamily: 'serif', textAlign: 'center', width: '100%', padding: '0 4px' }}>
+                  {g.username?.substring(0, 6)}
+                </div>
                 
                 {longPressedGuestId === g.id && (
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleBlockUser(g.id); }} 
                     style={{ 
                       position: 'absolute', left: '65px', top: '50%', transform: 'translateY(-50%)',
-                      zIndex: 99999, background: '#ff4444', color: '#fff', border: '2px solid #fff', 
+                      zIndex: 99999, background: '#800020', color: '#fff', border: '1px solid #D4AF37', 
                       borderRadius: '8px', padding: '10px 15px', fontSize: '0.8rem', fontWeight: 'bold', 
                       whiteSpace: 'nowrap', boxShadow: '0 4px 15px rgba(0,0,0,0.8)', fontFamily: 'serif'
                     }}
