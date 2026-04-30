@@ -108,6 +108,7 @@ export default function AdminPage() {
                           borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
                           border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
                           fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                          /* 文字選択を禁止 */
                           WebkitUserSelect: 'none', userSelect: 'none'
                         }}>
                         {m.is_image ? (
@@ -118,6 +119,7 @@ export default function AdminPage() {
                               maxWidth: '100%', 
                               borderRadius: '10px', 
                               display: 'block',
+                              /* 画像のみ長押し保存メニューを許可 */
                               WebkitTouchCallout: 'default',
                               WebkitUserSelect: 'auto',
                               userSelect: 'auto',
@@ -142,9 +144,25 @@ export default function AdminPage() {
     <div style={{ 
       width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
-      WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'
+      /* 選択時の青いハイライトを完全に消去 */
+      WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent'
     }}>
-      {/* ヘッダー：背景色を#800020に変更。ロゴを少し右にずらす */}
+      {/* 青い選択範囲を無効化する追加スタイル */}
+      <style jsx global>{`
+        * {
+          -webkit-tap-highlight-color: transparent !important;
+          outline: none !important;
+        }
+        ::selection {
+          background: transparent !important;
+          color: inherit !important;
+        }
+        ::-moz-selection {
+          background: transparent !important;
+          color: inherit !important;
+        }
+      `}</style>
+
       <header style={{ 
         padding: '30px 15px 15px', 
         background: '#800020', 
@@ -164,7 +182,7 @@ export default function AdminPage() {
           margin: 0, 
           letterSpacing: '3px', 
           color: '#fff',
-          paddingLeft: '20px' /* 全体を少し右にずらす */
+          paddingLeft: '20px' 
         }}>
           for VAU <span style={{ fontSize: '1.1rem', verticalAlign: 'middle' }}>ｰHOSTｰ</span>
         </h1>
@@ -174,7 +192,7 @@ export default function AdminPage() {
         {viewMode === 'DIRECT' && (
           <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
             {sortedGuests.map(g => (
-              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', WebkitTapHighlightColor: 'transparent' }}>
                 <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
                 <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px' }}>{g.username?.substring(0, 5)}</div>
               </div>
@@ -186,7 +204,6 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* フッター：背景色を#800020に変更 */}
       <footer style={{ 
         padding: '12px 15px', background: '#800020', borderTop: '1px solid #D4AF37', 
         display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px',
@@ -206,7 +223,9 @@ export default function AdminPage() {
               letterSpacing: '2px',
               padding: '5px 10px',
               borderBottom: viewMode === mode ? '1px solid #D4AF37' : '1px solid transparent',
-              transition: 'all 0.2s ease'
+              transition: 'all 0.2s ease',
+              WebkitTapHighlightColor: 'transparent',
+              outline: 'none'
             }}
           >
             {mode}
