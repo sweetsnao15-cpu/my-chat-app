@@ -224,7 +224,6 @@ export default function GuestPage() {
       </header>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', background: '#050505' }}>
-        {/* ホスト側グローバルページと同じmaxWidth: 600pxに設定 */}
         <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '20px' }}>
           {messages.filter(m => !deletedIds.includes(m.id)).map((m, index) => {
             const isMe = m.user_id === user.id;
@@ -244,14 +243,15 @@ export default function GuestPage() {
                   </div>
                 )}
                 <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                  {/* maxWidthを100%に広げ、1行に表示できる文字数をホスト側と同じに調整 */}
                   <div onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => handleTouchStart(e, m)} onTouchEnd={handleTouchEnd} style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '100%' }}>
                     <div style={{ 
                       padding: m.is_image ? '5px' : '12px 16px', 
-                      background: 'rgba(0, 0, 0, 0.5)', 
+                      // ホスト側と背景色を統一
+                      background: isMe ? 'rgba(26, 26, 26, 0.75)' : 'rgba(80, 0, 0, 0.75)', 
                       backdropFilter: 'blur(4px)', 
                       borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                      border: '1px solid #D4AF37', 
+                      // ホスト側のボーダー設定を適用
+                      border: isMe ? '1px solid #D4AF37' : '1px solid rgba(128, 0, 0, 0.3)', 
                       fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
                     }}>
                       {m.is_image ? (
