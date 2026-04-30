@@ -144,10 +144,10 @@ export default function AdminPage() {
     <div style={{ 
       width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
-      /* 選択時の青いハイライトを完全に消去 */
+      /* ページ全体の青いハイライトとタップ枠を無効化 */
       WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent'
     }}>
-      {/* 青い選択範囲を無効化する追加スタイル */}
+      {/* グローバルなCSSで完全に制御 */}
       <style jsx global>{`
         * {
           -webkit-tap-highlight-color: transparent !important;
