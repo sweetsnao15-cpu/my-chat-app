@@ -151,13 +151,13 @@ export default function GuestPage() {
   if (!user) {
     return (
       <div style={{ height: '100dvh', background: '#000', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'serif', padding: '20px' }}>
-        <form onSubmit={handleLogin} style={{ background: '#0a0a0a', border: '2px solid #800000', borderRadius: '25px', padding: '50px 30px', width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', gap: '25px' }}>
-          <h1 style={{ color: '#800000', fontSize: '3.8rem', fontStyle: 'italic', fontWeight: 'bold', margin: '0', textAlign: 'center' }}>for VAU</h1>
+        <form onSubmit={handleLogin} style={{ background: '#0a0a0a', border: '2px solid #800020', borderRadius: '25px', padding: '50px 30px', width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', gap: '25px' }}>
+          <h1 style={{ color: '#800020', fontSize: '3.8rem', fontStyle: 'italic', fontWeight: 'bold', margin: '0', textAlign: 'center' }}>for VAU</h1>
           <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
             <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
           </div>
-          <button type="submit" style={{ width: '100%', background: '#800000', color: '#fff', border: 'none', padding: '18px', borderRadius: '12px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold' }}>LOGIN</button>
+          <button type="submit" style={{ width: '100%', background: '#800020', color: '#fff', border: 'none', padding: '18px', borderRadius: '12px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold' }}>LOGIN</button>
         </form>
       </div>
     );
@@ -178,14 +178,14 @@ export default function GuestPage() {
             <button onClick={handleLogout} style={{ width: '100%', background: 'transparent', border: 'none', color: '#ff4d4d', fontSize: '0.9rem', marginBottom: '20px', cursor: 'pointer', fontWeight: 'bold' }}>LOGOUT</button>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={() => setShowSettings(false)} style={{ flex: 1, background: 'transparent', border: '1px solid #444', color: '#888', padding: '12px', borderRadius: '10px' }}>CANCEL</button>
-              <button onClick={saveProfile} style={{ flex: 1, background: '#800000', color: '#fff', padding: '12px', borderRadius: '10px', fontWeight: 'bold' }}>SAVE</button>
+              <button onClick={saveProfile} style={{ flex: 1, background: '#800020', color: '#fff', padding: '12px', borderRadius: '10px', fontWeight: 'bold' }}>SAVE</button>
             </div>
           </div>
         </div>
       )}
 
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
+        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800020', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
           <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
           <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: (contextMenu.msg.user_id === user.id) ? '1px solid #333' : 'none' }} onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}>削除</button>
           {contextMenu.msg.user_id === user.id && (
@@ -194,22 +194,24 @@ export default function GuestPage() {
         </div>
       )}
 
-      {/* ヘッダー：高さを上げ、ロゴとアイコンを少し下げて大きく調整 */}
+      {/* ヘッダー：ホスト側と同じ高さとレイアウトに調整 */}
       <header style={{ 
-        padding: '35px 15px 15px', /* 上のパディングを増やして高さを確保 */
-        background: '#4a0000', 
+        padding: '30px 15px 15px', 
+        background: '#800020', 
         borderBottom: '1px solid #D4AF37', 
         display: 'flex', 
-        alignItems: 'flex-end', /* 下揃えにして、ロゴが下がって見えるように */
+        alignItems: 'center', 
         justifyContent: 'center', 
         position: 'relative', 
         flexShrink: 0, 
         zIndex: 10,
-        minHeight: '100px'
+        minHeight: '80px'
       }}>
-        <span style={{ fontSize: '2rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '6px', color: '#fff', marginBottom: '5px' }}>for VAU</span>
-        <div onClick={() => setShowSettings(!showSettings)} style={{ position: 'absolute', right: '15px', bottom: '15px', cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
-          {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>GUEST</div>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <span style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '3px', color: '#fff' }}>for VAU</span>
+          <div onClick={() => setShowSettings(!showSettings)} style={{ cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333', flexShrink: 0 }}>
+            {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>GUEST</div>}
+          </div>
         </div>
       </header>
 
@@ -234,13 +236,12 @@ export default function GuestPage() {
                 )}
                 <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                   <div onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => handleTouchStart(e, m)} onTouchEnd={handleTouchEnd} style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '85%' }}>
-                    {/* 吹き出し：透過した黒の背景 ＋ 金色の縁に修正 */}
                     <div style={{ 
                       padding: m.is_image ? '5px' : '12px 16px', 
-                      background: 'rgba(0, 0, 0, 0.5)', /* 透過した黒 */
+                      background: 'rgba(0, 0, 0, 0.5)', 
                       backdropFilter: 'blur(4px)', 
                       borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                      border: '1px solid #D4AF37', /* 金色の縁 */
+                      border: '1px solid #D4AF37', 
                       fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
                     }}>
                       {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
@@ -254,7 +255,7 @@ export default function GuestPage() {
         </div>
       </div>
 
-      <div style={{ padding: '12px 15px', background: '#4a0000', borderTop: '1px solid #D4AF37', flexShrink: 0, paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
+      <div style={{ padding: '12px 15px', background: '#800020', borderTop: '1px solid #D4AF37', flexShrink: 0, paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
         <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
           
           <button
