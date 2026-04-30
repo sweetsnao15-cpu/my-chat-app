@@ -39,8 +39,12 @@ export default function AdminPage() {
 
   const fetchMessages = useCallback(async () => {
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
-    if (data) setMessages(data);
-  }, []);
+    if (data) {
+      setMessages(data);
+      // データ取得直後に最下部へスクロール
+      setTimeout(() => scrollToBottom('auto'), 0);
+    }
+  }, [scrollToBottom]);
 
   useEffect(() => {
     fetchGuests();
@@ -118,7 +122,6 @@ export default function AdminPage() {
                               maxWidth: '100%', 
                               borderRadius: '10px', 
                               display: 'block',
-                              /* 保存メニューは許可し、青い選択範囲のみを禁止 */
                               WebkitTouchCallout: 'default',
                               WebkitUserSelect: 'none',
                               userSelect: 'none',
@@ -181,7 +184,7 @@ export default function AdminPage() {
           color: '#fff',
           paddingLeft: '20px' 
         }}>
-          for VAU <span style={{ fontSize: '1.1rem', verticalAlign: 'middle' }}>ｰHOSTｰ</span>
+          for VAU <span style={{ fontSize: '1.1rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span>
         </h1>
       </header>
 
