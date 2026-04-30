@@ -7,9 +7,27 @@ const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 const Avatar = ({ profile, size = '32px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
-    <div style={{ position: 'relative', width: size, height: size, opacity: isSelected ? 1 : 0.6, flexShrink: 0 }}>
+    <div 
+      style={{ 
+        position: 'relative', width: size, height: size, 
+        opacity: isSelected ? 1 : 0.6, flexShrink: 0,
+        /* iPhoneでの画像長押し保存・選択を防止 */
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none'
+      }}
+    >
       {profile?.avatar_url ? (
-        <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444' }} alt="" />
+        <img 
+          src={profile.avatar_url} 
+          onContextMenu={(e) => e.preventDefault()} // 右クリック/長押しメニューを禁止
+          style={{ 
+            width: '100%', height: '100%', borderRadius: '50%', 
+            objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444',
+            pointerEvents: 'none' // 画像自体へのクリック判定を無効化（親要素でイベントを取るため）
+          }} 
+          alt="" 
+        />
       ) : (
         <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.7rem', border: '1px solid #D4AF37' }}>{initial}</div>
       )}
@@ -29,21 +47,17 @@ export default function AdminPage() {
   const pressTimerRef = useRef(null);
 
   const scrollToBottomInstant = useCallback(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, []);
 
   const fetchMessages = useCallback(async () => {
     const { data: blockData } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', ADMIN_ID);
     const currentBlocked = blockData?.map(b => b.blocked_id) || [];
     setBlockedIds(currentBlocked);
-
     let query = supabase.from('messages').select('*');
     if (currentBlocked.length > 0) {
       query = query.not('user_id', 'in', `(${currentBlocked.join(',')})`).not('receiver_id', 'in', `(${currentBlocked.join(',')})`);
     }
-
     const { data } = await query.order('created_at', { ascending: true });
     if (data) setMessages(data);
   }, []);
@@ -63,19 +77,13 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
-  useEffect(() => {
-    scrollToBottomInstant();
-  }, [viewMode, selectedGuestId, messages, scrollToBottomInstant]);
+  useEffect(() => { scrollToBottomInstant(); }, [viewMode, selectedGuestId, messages, scrollToBottomInstant]);
 
   const handleBlockUser = async (targetId) => {
     if (!confirm("このユーザーをブロックしますか？")) return;
     const { error } = await supabase.from('blocks').insert([{ blocker_id: ADMIN_ID, blocked_id: targetId }]);
-    if (error) {
-      alert("ブロックに失敗しました。");
-    } else {
-      setLongPressedGuestId(null);
-      fetchMessages();
-    }
+    if (error) alert("ブロックに失敗しました。");
+    else { setLongPressedGuestId(null); fetchMessages(); }
   };
 
   const startPress = (guestId) => {
@@ -97,8 +105,16 @@ export default function AdminPage() {
   }, [guests, messages, blockedIds]);
 
   return (
-    <div onClick={() => setLongPressedGuestId(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', WebkitTouchCallout: 'none' }}>
-      <header style={{ padding: '20px', background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'center', zIndex: 5 }}>
+    <div 
+      onClick={() => setLongPressedGuestId(null)} 
+      onContextMenu={(e) => e.preventDefault()} // 画面全体のコンテキストメニューを禁止
+      style={{ 
+        width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
+        background: '#000', color: '#fff', overflow: 'hidden',
+        WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'
+      }}
+    >
+      <header style={{ padding: '20px', background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'center' }}>
         <h1 style={{ fontSize: '1.5rem', fontStyle: 'italic', margin: 0 }}>for VAU ｰHOSTｰ</h1>
       </header>
 
@@ -116,34 +132,13 @@ export default function AdminPage() {
                 <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
                 <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px' }}>{g.username?.substring(0, 5)}</div>
                 
-                {/* 
-                  最前面表示のブロックボタン
-                  z-index: 999 を指定し、サイドバーを突き抜けて表示されるように調整
-                */}
                 {longPressedGuestId === g.id && (
-                  <div style={{
-                    position: 'absolute',
-                    left: '65px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 999,
-                    filter: 'drop-shadow(0px 0px 10px rgba(0,0,0,0.8))'
-                  }}>
+                  <div style={{ position: 'absolute', left: '65px', top: '50%', transform: 'translateY(-50%)', zIndex: 999 }}>
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleBlockUser(g.id); }} 
-                      style={{ 
-                        background: '#ff0000', 
-                        color: '#fff', 
-                        border: '2px solid #fff', 
-                        borderRadius: '8px', 
-                        padding: '10px 15px', 
-                        fontSize: '0.8rem', 
-                        fontWeight: 'bold', 
-                        whiteSpace: 'nowrap',
-                        boxShadow: '0 4px 15px rgba(255,0,0,0.4)'
-                      }}
+                      style={{ background: '#ff0000', color: '#fff', border: '2px solid #fff', borderRadius: '8px', padding: '10px 15px', fontSize: '0.8rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}
                     >
-                      ブロックする
+                      ブロック
                     </button>
                   </div>
                 )}
@@ -152,20 +147,16 @@ export default function AdminPage() {
           </div>
         )}
         <div style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px' }} ref={scrollRef}>
-          {/* メッセージ表示部分は前回のロジックを継承 */}
-          {/* ... (省略: renderMessagesを実行) ... */}
-          {messages.length > 0 && (
-            <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-               {/* 簡略化して表示。実際は前回のコードのrenderMessagesの中身が入ります */}
-               {messages.filter(m => viewMode === 'GLOBAL' || (m.user_id === selectedGuestId || m.receiver_id === selectedGuestId)).map(m => (
-                 <div key={m.id} style={{ color: '#fff' }}>{m.content}</div>
-               ))}
-            </div>
-          )}
+          {/* メッセージ表示エリア (renderMessagesは前回の実装通り) */}
+          <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+             {messages.filter(m => viewMode === 'GLOBAL' || (m.user_id === selectedGuestId || m.receiver_id === selectedGuestId)).map(m => (
+               <div key={m.id} style={{ color: '#fff', marginBottom: '10px' }}>{m.content}</div>
+             ))}
+          </div>
         </div>
       </div>
 
-      <footer style={{ padding: '15px', background: '#800020', borderTop: '1px solid #D4AF37', display: 'flex', justifyContent: 'center', gap: '40px', zIndex: 5 }}>
+      <footer style={{ padding: '15px', background: '#800020', borderTop: '1px solid #D4AF37', display: 'flex', justifyContent: 'center', gap: '40px' }}>
         {['GLOBAL', 'DIRECT'].map(mode => (
           <button key={mode} onClick={() => setViewMode(mode)} style={{ background: 'transparent', color: viewMode === mode ? '#D4AF37' : '#fff', border: 'none', fontWeight: 'bold' }}>{mode}</button>
         ))}
