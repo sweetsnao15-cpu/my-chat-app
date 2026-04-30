@@ -5,6 +5,7 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  themeColor: "#800020", // ブラウザのアドレスバーの色を指定
 };
 
 export const metadata = {
@@ -30,10 +31,10 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ja" className="h-full antialiased">
       <head>
-        {/* iPhone用のアイコン指定を512に更新 */}
+        {/* iOS用アイコンの記述を強化 */}
         <link rel="apple-touch-icon" href="/icon-512.png" />
-        {/* ホーム画面追加時のタイトルを補強 */}
-        <meta name="apple-mobile-web-app-title" content="for VAU" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
