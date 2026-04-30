@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase } from '@/lib/supabase'; // パスをプロジェクト標準の@/に修正
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
@@ -98,8 +98,7 @@ export default function GuestPage() {
     if (!error) {
       if (!isImage) {
         setInputText('');
-        const textarea = document.querySelector('textarea');
-        if (textarea) textarea.style.height = 'auto';
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
       }
       fetchMessages(user.id);
     }
@@ -146,6 +145,8 @@ export default function GuestPage() {
     await supabase.auth.signInWithPassword({ email, password });
   };
 
+  const textareaRef = useRef(null);
+
   if (loading) return <div style={{ height: '100dvh', background: '#000' }} />;
 
   if (!user) {
@@ -165,8 +166,10 @@ export default function GuestPage() {
 
   return (
     <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none' }}>
+      
+      {/* 設定画面（プロフィール編集） */}
       {showSettings && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 20000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 20000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(10px)' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: '#111', border: '1px solid #D4AF37', borderRadius: '20px', padding: '30px', width: '100%', maxWidth: '400px', textAlign: 'center' }}>
             <h2 style={{ color: '#D4AF37', marginBottom: '20px', fontStyle: 'italic' }}>PROFILE SETTINGS</h2>
             <div style={{ position: 'relative', width: '100px', height: '100px', margin: '0 auto 20px', cursor: 'pointer' }} onClick={() => avatarFileInputRef.current.click()}>
@@ -174,7 +177,7 @@ export default function GuestPage() {
               <input type="file" ref={avatarFileInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
             </div>
             <input type="text" value={profile.username} onChange={(e) => setProfile(prev => ({ ...prev, username: e.target.value }))} placeholder="Username" style={{ width: '100%', background: '#000', border: '1px solid #333', borderRadius: '10px', padding: '12px', color: '#fff', marginBottom: '10px', textAlign: 'center' }} />
-            <button onClick={handleLogout} style={{ width: '100%', background: 'transparent', border: 'none', color: '#666', fontSize: '0.8rem', marginBottom: '20px', textDecoration: 'underline', cursor: 'pointer' }}>LOGOUT</button>
+            <button onClick={handleLogout} style={{ width: '100%', background: 'transparent', border: 'none', color: '#ff4d4d', fontSize: '0.9rem', marginBottom: '20px', cursor: 'pointer', fontWeight: 'bold' }}>LOGOUT</button>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={() => setShowSettings(false)} style={{ flex: 1, background: 'transparent', border: '1px solid #444', color: '#888', padding: '12px', borderRadius: '10px' }}>CANCEL</button>
               <button onClick={saveProfile} style={{ flex: 1, background: '#800000', color: '#fff', padding: '12px', borderRadius: '10px', fontWeight: 'bold' }}>SAVE</button>
@@ -182,6 +185,8 @@ export default function GuestPage() {
           </div>
         </div>
       )}
+
+      {/* コンテキストメニュー */}
       {contextMenu && (
         <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800000', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
           <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
@@ -191,12 +196,16 @@ export default function GuestPage() {
           )}
         </div>
       )}
-      <header style={{ height: '80px', background: '#800000', borderBottom: '1px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}>
-        <span style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '2px', paddingTop: '10px' }}>for VAU</span>
-        <div onClick={() => setShowSettings(!showSettings)} style={{ position: 'absolute', right: '15px', top: '20px', cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
-          {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>VAU</div>}
+
+      {/* ヘッダー：濃い赤色と大きなロゴ */}
+      <header style={{ padding: '35px 15px', background: '#4a0000', borderBottom: '1px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0, zIndex: 10 }}>
+        <span style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '5px', color: '#fff' }}>for VAU</span>
+        <div onClick={() => setShowSettings(!showSettings)} style={{ position: 'absolute', right: '15px', cursor: 'pointer', width: '42px', height: '42px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
+          {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>GUEST</div>}
         </div>
       </header>
+
+      {/* メッセージ表示エリア */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', background: '#050505' }}>
         <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '20px' }}>
           {messages.filter(m => !deletedIds.includes(m.id)).map((m, index) => {
@@ -208,6 +217,7 @@ export default function GuestPage() {
             const currentMsgIndex = filteredMessages.findIndex(fm => fm.id === m.id);
             const prevMsg = currentMsgIndex > 0 ? filteredMessages[currentMsgIndex - 1] : null;
             const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
+            
             return (
               <div key={m.id}>
                 {isNewDay && (
@@ -217,7 +227,14 @@ export default function GuestPage() {
                 )}
                 <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                   <div onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => handleTouchStart(e, m)} onTouchEnd={handleTouchEnd} style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '85%' }}>
-                    <div style={{ padding: m.is_image ? '5px' : '12px 16px', background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', backdropFilter: 'blur(4px)', borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    <div style={{ 
+                      padding: m.is_image ? '5px' : '12px 16px', 
+                      background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
+                      backdropFilter: 'blur(4px)', 
+                      borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
+                      border: '1px solid #D4AF37', 
+                      fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
+                    }}>
                       {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
                     </div>
                     <div style={{ fontSize: '0.55rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px' }}>{timeStr}</div>
@@ -228,12 +245,45 @@ export default function GuestPage() {
           })}
         </div>
       </div>
-      <div style={{ padding: '10px 15px', background: '#800000', borderTop: '1px solid #D4AF37', flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
-        <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-          <button onClick={() => chatFileInputRef.current?.click()} style={{ background: 'transparent', border: 'none', color: '#D4AF37', fontSize: '1.5rem', padding: '5px', cursor: 'pointer' }}>{isUploading ? '...' : '⊕'}</button>
+
+      {/* フッター：濃い赤色と統一されたボタン */}
+      <div style={{ padding: '12px 15px', background: '#4a0000', borderTop: '1px solid #D4AF37', flexShrink: 0, paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
+        <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+          
+          {/* カメラボタン：黒背景＋ゴールド枠 */}
+          <button
+            onClick={() => chatFileInputRef.current?.click()}
+            disabled={isUploading}
+            style={{ 
+              background: '#000', border: '1px solid #D4AF37', borderRadius: '50%', 
+              width: '42px', height: '42px', display: 'flex', alignItems: 'center', 
+              justifyContent: 'center', cursor: 'pointer', flexShrink: 0
+            }}
+          >
+            {isUploading ? <span style={{ color: '#D4AF37', fontSize: '0.6rem' }}>...</span> : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+              </svg>
+            )}
+          </button>
           <input type="file" ref={chatFileInputRef} hidden accept="image/*" onChange={handleChatImageUpload} />
-          <textarea value={inputText} onChange={e => setInputText(e.target.value)} placeholder="MESSAGES..." rows={1} onInput={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} style={{ flex: 1, background: 'rgba(0,0,0,0.3)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '18px', padding: '8px 15px', resize: 'none', fontSize: '16px', outline: 'none', lineHeight: '1.4', maxHeight: '120px' }} />
-          <button onClick={() => handleSend(inputText)} style={{ background: '#000', color: '#D4AF37', padding: '8px 18px', borderRadius: '18px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '13px', cursor: 'pointer' }}>SEND</button>
+
+          <textarea 
+            ref={textareaRef}
+            value={inputText} 
+            onChange={e => setInputText(e.target.value)} 
+            placeholder="MESSAGES..." 
+            rows={1} 
+            onInput={(e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }} 
+            style={{ flex: 1, background: 'rgba(0,0,0,0.4)', color: '#fff', border: '1px solid rgba(212,175,55,0.3)', borderRadius: '22px', padding: '10px 18px', resize: 'none', fontSize: '16px', outline: 'none', lineHeight: '1.4', maxHeight: '120px' }} 
+          />
+          
+          <button 
+            onClick={() => handleSend(inputText)} 
+            style={{ background: '#000', color: '#D4AF37', padding: '10px 20px', borderRadius: '22px', fontWeight: 'bold', border: '1px solid #D4AF37', fontSize: '0.85rem', cursor: 'pointer', height: '42px' }}
+          >
+            SEND
+          </button>
         </div>
       </div>
     </div>
