@@ -164,7 +164,15 @@ export default function GuestPage() {
   }
 
   return (
-    <div onClick={() => setContextMenu(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif', WebkitUserSelect: 'none', userSelect: 'none' }}>
+    <div onClick={() => setContextMenu(null)} style={{ 
+      width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
+      background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
+      WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent'
+    }}>
+      <style jsx global>{`
+        * { -webkit-tap-highlight-color: transparent !important; outline: none !important; }
+        ::selection { background: transparent !important; color: inherit !important; }
+      `}</style>
       
       {showSettings && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 20000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(10px)' }}>
@@ -194,28 +202,29 @@ export default function GuestPage() {
         </div>
       )}
 
-      {/* ヘッダー：ホスト側と同じ高さとレイアウトに調整 */}
       <header style={{ 
         padding: '30px 15px 15px', 
         background: '#800020', 
         borderBottom: '1px solid #D4AF37', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
+        display: 'grid',
+        gridTemplateColumns: '45px 1fr 45px',
+        alignItems: 'center',
         position: 'relative', 
         flexShrink: 0, 
         zIndex: 10,
         minHeight: '80px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+        <div /> 
+        <div style={{ textAlign: 'center' }}>
           <span style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '3px', color: '#fff' }}>for VAU</span>
-          <div onClick={() => setShowSettings(!showSettings)} style={{ cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333', flexShrink: 0 }}>
-            {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>GUEST</div>}
-          </div>
+        </div>
+        <div onClick={() => setShowSettings(!showSettings)} style={{ cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333', justifySelf: 'end' }}>
+          {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>GUEST</div>}
         </div>
       </header>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', background: '#050505' }}>
+        {/* ホスト側グローバルページと同じmaxWidth: 600pxに設定 */}
         <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '20px' }}>
           {messages.filter(m => !deletedIds.includes(m.id)).map((m, index) => {
             const isMe = m.user_id === user.id;
@@ -235,7 +244,8 @@ export default function GuestPage() {
                   </div>
                 )}
                 <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                  <div onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => handleTouchStart(e, m)} onTouchEnd={handleTouchEnd} style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '85%' }}>
+                  {/* maxWidthを100%に広げ、1行に表示できる文字数をホスト側と同じに調整 */}
+                  <div onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => handleTouchStart(e, m)} onTouchEnd={handleTouchEnd} style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '100%' }}>
                     <div style={{ 
                       padding: m.is_image ? '5px' : '12px 16px', 
                       background: 'rgba(0, 0, 0, 0.5)', 
@@ -244,7 +254,19 @@ export default function GuestPage() {
                       border: '1px solid #D4AF37', 
                       fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
                     }}>
-                      {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
+                      {m.is_image ? (
+                        <img 
+                          src={m.content} 
+                          onLoad={() => scrollToBottom('auto')} 
+                          style={{ 
+                            maxWidth: '100%', 
+                            borderRadius: '10px', 
+                            display: 'block',
+                            WebkitTouchCallout: 'none',
+                            pointerEvents: 'none'
+                          }} 
+                        />
+                      ) : m.content}
                     </div>
                     <div style={{ fontSize: '0.55rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px' }}>{timeStr}</div>
                   </div>
