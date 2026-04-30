@@ -9,10 +9,21 @@ export default function manifest() {
     theme_color: '#800020',
     icons: [
       {
-        src: '/icon-512.png?v=2', // ここにもバージョンを付与
+        // iOSと共通のキャッシュ回避用クエリ
+        src: '/icon-512.png?v=3',
         sizes: '512x512',
         type: 'image/png',
-        purpose: 'any' // maskableからanyに変更（iOSとの相性を考慮）
+        /* 
+          'any' にすることで、OSが余計な余白（白縁）を
+          作らずに画像全体を使用するように促します。
+        */
+        purpose: 'any'
+      },
+      {
+        src: '/icon-512.png?v=3',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable'
       }
     ]
   }
