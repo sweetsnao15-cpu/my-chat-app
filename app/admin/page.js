@@ -108,7 +108,6 @@ export default function AdminPage() {
                           borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
                           border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
                           fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                          /* 文字選択を禁止 */
                           WebkitUserSelect: 'none', userSelect: 'none'
                         }}>
                         {m.is_image ? (
@@ -119,10 +118,10 @@ export default function AdminPage() {
                               maxWidth: '100%', 
                               borderRadius: '10px', 
                               display: 'block',
-                              /* 画像のみ長押し保存メニューを許可 */
+                              /* 保存メニューは許可し、青い選択範囲のみを禁止 */
                               WebkitTouchCallout: 'default',
-                              WebkitUserSelect: 'auto',
-                              userSelect: 'auto',
+                              WebkitUserSelect: 'none',
+                              userSelect: 'none',
                               pointerEvents: 'auto'
                             }} 
                           />
@@ -144,10 +143,8 @@ export default function AdminPage() {
     <div style={{ 
       width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
-      /* ページ全体の青いハイライトとタップ枠を無効化 */
       WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent'
     }}>
-      {/* グローバルなCSSで完全に制御 */}
       <style jsx global>{`
         * {
           -webkit-tap-highlight-color: transparent !important;
