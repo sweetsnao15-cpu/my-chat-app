@@ -62,8 +62,6 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchInitialData();
-
-    // リアルタイム購読の強化
     const channel = supabase.channel('realtime_admin')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
         if (payload.eventType === 'INSERT') {
@@ -76,7 +74,6 @@ export default function AdminPage() {
         fetchInitialData();
       })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [fetchInitialData]);
 
@@ -144,7 +141,21 @@ export default function AdminPage() {
                         borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
                         fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'serif'
                       }}>
-                        {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px', pointerEvents: 'none' }} onContextMenu={(e)=>e.preventDefault()} /> : m.content}
+                        {m.is_image ? (
+                          <img 
+                            src={m.content} 
+                            style={{ 
+                              maxWidth: '100%', 
+                              borderRadius: '10px', 
+                              // 保存を可能にするための設定
+                              pointerEvents: 'auto', 
+                              WebkitTouchCallout: 'default', 
+                              WebkitUserSelect: 'auto', 
+                              userSelect: 'auto' 
+                            }} 
+                            alt="Message"
+                          />
+                        ) : m.content}
                       </div>
                       <div style={{ fontSize: '0.5rem', color: '#D4AF37', fontFamily: 'serif' }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
@@ -160,17 +171,19 @@ export default function AdminPage() {
 
   return (
     <div 
+      // 背景部分のクリックではブロック解除を維持
       onClick={() => setLongPressedGuestId(null)} 
-      onContextMenu={(e) => e.preventDefault()}
+      // 全体の右クリック禁止を解除し、メッセージ内の画像でメニューを出せるようにする
+      // ただしサイドバーなどは個別に禁止を維持
       style={{ 
         width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
-        background: '#000', color: '#fff', overflow: 'hidden',
-        WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' 
+        background: '#000', color: '#fff', overflow: 'hidden'
       }}
     >
       <header style={{ 
-        padding: '20px', paddingLeft: '40px', // 全体を少し右にずらす
-        background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'left', zIndex: 100 
+        padding: '20px', paddingLeft: '40px', 
+        background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'left', zIndex: 100,
+        WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' 
       }}>
         <h1 style={{ margin: 0, fontFamily: 'serif', fontWeight: 'normal', letterSpacing: '2px', display: 'flex', alignItems: 'flex-end' }}>
           <span style={{ fontSize: '1.8rem', fontStyle: 'italic', color: '#fff', marginBottom: '-3px' }}>for VAU</span>
@@ -182,7 +195,8 @@ export default function AdminPage() {
         {viewMode === 'DIRECT' && (
           <div style={{ 
             width: '85px', borderRight: '1px solid #222', overflowY: 'auto', overflowX: 'visible',
-            display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', zIndex: 20
+            display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', zIndex: 20,
+            WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' 
           }}>
             {filteredGuests.map(g => (
               <div 
@@ -212,12 +226,20 @@ export default function AdminPage() {
             ))}
           </div>
         )}
-        <div style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px', zIndex: 1 }} ref={scrollRef}>
+        <div 
+          style={{ 
+            flex: 1, background: '#050505', overflowY: 'auto', padding: '15px', zIndex: 1
+          }} 
+          ref={scrollRef}
+        >
           {renderMessages()}
         </div>
       </div>
 
-      <footer style={{ padding: '15px', background: '#800020', borderTop: '1px solid #D4AF37', display: 'flex', justifyContent: 'center', gap: '40px', zIndex: 100 }}>
+      <footer style={{ 
+        padding: '15px', background: '#800020', borderTop: '1px solid #D4AF37', display: 'flex', justifyContent: 'center', gap: '40px', zIndex: 100,
+        WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' 
+      }}>
         {['GLOBAL', 'DIRECT'].map(mode => (
           <button 
             key={mode} 
