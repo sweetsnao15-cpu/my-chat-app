@@ -1,20 +1,19 @@
-// app/manifest.js
 export default function manifest() {
   return {
-    name: 'for VAU',               // インストール時の名前
-    short_name: 'for VAU',         // アイコンの下に表示される名前
+    name: 'for VAU',
+    short_name: 'for VAU',
     description: 'for VAU Communication App',
     start_url: '/',
-    display: 'standalone',         // アプリのように全画面表示
+    display: 'standalone',
     background_color: '#000000',
-    theme_color: '#800000',        // テーマカラー
-    "icons": [
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ]
+    theme_color: '#800020',
+    icons: [
+      {
+        src: '/icon-512.png?v=2', // ここにもバージョンを付与
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any' // maskableからanyに変更（iOSとの相性を考慮）
+      }
+    ]
   }
 }
