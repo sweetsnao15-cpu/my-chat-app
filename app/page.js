@@ -194,11 +194,22 @@ export default function GuestPage() {
         </div>
       )}
 
-      {/* ヘッダー：高さを少し低く(paddingを20pxに調整) */}
-      <header style={{ padding: '20px 15px', background: '#4a0000', borderBottom: '1px solid #D4AF37', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0, zIndex: 10 }}>
-        <span style={{ fontSize: '1.6rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '5px', color: '#fff' }}>for VAU</span>
-        <div onClick={() => setShowSettings(!showSettings)} style={{ position: 'absolute', right: '15px', cursor: 'pointer', width: '38px', height: '38px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
-          {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem' }}>GUEST</div>}
+      {/* ヘッダー：高さを上げ、ロゴとアイコンを少し下げて大きく調整 */}
+      <header style={{ 
+        padding: '35px 15px 15px', /* 上のパディングを増やして高さを確保 */
+        background: '#4a0000', 
+        borderBottom: '1px solid #D4AF37', 
+        display: 'flex', 
+        alignItems: 'flex-end', /* 下揃えにして、ロゴが下がって見えるように */
+        justifyContent: 'center', 
+        position: 'relative', 
+        flexShrink: 0, 
+        zIndex: 10,
+        minHeight: '100px'
+      }}>
+        <span style={{ fontSize: '2rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '6px', color: '#fff', marginBottom: '5px' }}>for VAU</span>
+        <div onClick={() => setShowSettings(!showSettings)} style={{ position: 'absolute', right: '15px', bottom: '15px', cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333' }}>
+          {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>GUEST</div>}
         </div>
       </header>
 
@@ -223,13 +234,13 @@ export default function GuestPage() {
                 )}
                 <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                   <div onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => handleTouchStart(e, m)} onTouchEnd={handleTouchEnd} style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '85%' }}>
-                    {/* 吹き出し背景色をホスト側と同じ設定に変更 */}
+                    {/* 吹き出し：透過した黒の背景 ＋ 金色の縁に修正 */}
                     <div style={{ 
                       padding: m.is_image ? '5px' : '12px 16px', 
-                      background: isMe ? 'rgba(128, 0, 0, 0.8)' : '#1a1a1a', 
+                      background: 'rgba(0, 0, 0, 0.5)', /* 透過した黒 */
                       backdropFilter: 'blur(4px)', 
                       borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                      border: isMe ? '1px solid #800000' : '1px solid #333', 
+                      border: '1px solid #D4AF37', /* 金色の縁 */
                       fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
                     }}>
                       {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
