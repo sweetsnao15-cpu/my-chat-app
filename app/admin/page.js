@@ -94,7 +94,9 @@ export default function AdminPage() {
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  {!isMe && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="28px" /></div>}
+                  {/* DIRECTモード以外かつ自分以外の時のみアイコンを表示 */}
+                  {!isMe && viewMode !== 'DIRECT' && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="28px" /></div>}
+                  
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
                     {!isMe && viewMode === 'GLOBAL' && (
                       <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>{senderProfile?.username || 'Guest'}</span>
@@ -109,7 +111,21 @@ export default function AdminPage() {
                           fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                           WebkitUserSelect: 'none', userSelect: 'none'
                         }}>
-                        {m.is_image ? <img src={m.content} onLoad={() => scrollToBottom('auto')} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} /> : m.content}
+                        {m.is_image ? (
+                          <img 
+                            src={m.content} 
+                            onLoad={() => scrollToBottom('auto')} 
+                            style={{ 
+                              maxWidth: '100%', 
+                              borderRadius: '10px', 
+                              display: 'block',
+                              /* 画像のみ長押し保存を許可 */
+                              WebkitUserSelect: 'auto',
+                              userSelect: 'auto',
+                              pointerEvents: 'auto'
+                            }} 
+                          />
+                        ) : m.content}
                       </div>
                       <div style={{ fontSize: '0.5rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px', opacity: 0.8 }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
@@ -129,14 +145,26 @@ export default function AdminPage() {
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
       WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'
     }}>
-      {/* ゲスト側と同じ高さのヘッダー */}
+      {/* ヘッダー：高さを上げ、ロゴを大きく調整 */}
       <header style={{ 
-        padding: '15px', background: '#800000', borderBottom: '1px solid #D4AF37', 
-        textAlign: 'center', flexShrink: 0, zIndex: 10
+        padding: '30px 15px 15px', 
+        background: '#800000', 
+        borderBottom: '1px solid #D4AF37', 
+        textAlign: 'center', 
+        flexShrink: 0, 
+        zIndex: 10,
+        minHeight: '80px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
       }}>
         <h1 style={{ 
-          fontSize: '1.2rem', fontStyle: 'italic', fontWeight: 'bold', 
-          margin: 0, letterSpacing: '2px', color: '#fff' 
+          fontSize: '1.8rem', 
+          fontStyle: 'italic', 
+          fontWeight: 'bold', 
+          margin: 0, 
+          letterSpacing: '3px', 
+          color: '#fff' 
         }}>
           for VAU ｰHOSTｰ
         </h1>
@@ -158,7 +186,6 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* ゲスト側と同じ高さのフッター */}
       <footer style={{ 
         padding: '12px 15px', background: '#800000', borderTop: '1px solid #D4AF37', 
         display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px',
