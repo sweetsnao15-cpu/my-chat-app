@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
 
+// ホストの固定ID
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
 const Avatar = ({ profile, size = '32px', isSelected = true }) => {
@@ -22,8 +23,9 @@ export default function AdminPage() {
   const [guests, setGuests] = useState([]);
   const [selectedGuestId, setSelectedGuestId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [longPressedGuestId, setLongPressedGuestId] = useState(null); // 長押し中のゲストID
-  
+  const [longPressedGuestId, setLongPressedGuestId] = useState(null);
+  const [blockedIds, setBlockedIds] = useState([]); // ブロック中のIDリスト
+
   const scrollRef = useRef(null);
   const pressTimerRef = useRef(null);
 
@@ -33,34 +35,68 @@ export default function AdminPage() {
     }
   }, []);
 
+  // 1. ブロックリストを取得する関数
+  const fetchBlocks = useCallback(async () => {
+    const { data } = await supabase
+      .from('blocks')
+      .select('blocked_id')
+      .eq('blocker_id', ADMIN_ID);
+    
+    if (data) {
+      setBlockedIds(data.map(b => b.blocked_id));
+    }
+  }, []);
+
   const fetchGuests = useCallback(async () => {
     const { data } = await supabase.from('profiles').select('*');
     if (data) setGuests(data);
   }, []);
 
+  // 2. メッセージ取得時にブロック対象を除外するクエリ
   const fetchMessages = useCallback(async () => {
-    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
+    // 最新のブロックリストを反映させるため、内部でブロックIDを考慮
+    const { data: blockData } = await supabase
+      .from('blocks')
+      .select('blocked_id')
+      .eq('blocker_id', ADMIN_ID);
+    
+    const currentBlocked = blockData?.map(b => b.blocked_id) || [];
+    setBlockedIds(currentBlocked);
+
+    let query = supabase.from('messages').select('*');
+
+    // ブロックしているユーザーが関わるメッセージをすべて除外
+    if (currentBlocked.length > 0) {
+      query = query
+        .not('user_id', 'in', `(${currentBlocked.join(',')})`)
+        .not('receiver_id', 'in', `(${currentBlocked.join(',')})`);
+    }
+
+    const { data } = await query.order('created_at', { ascending: true });
     if (data) setMessages(data);
   }, []);
 
   useEffect(() => {
+    fetchBlocks();
     fetchGuests();
     fetchMessages();
+
+    // リアルタイム購読（ブロックやメッセージの変化に反応）
     const channel = supabase.channel('admin_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, () => fetchMessages())
       .subscribe();
+
     return () => { supabase.removeChannel(channel); };
-  }, [fetchGuests, fetchMessages]);
+  }, [fetchBlocks, fetchGuests, fetchMessages]);
 
   useEffect(() => {
     scrollToBottomInstant();
-    const timer = setTimeout(scrollToBottomInstant, 0);
-    return () => clearTimeout(timer);
   }, [viewMode, selectedGuestId, messages, scrollToBottomInstant]);
 
-  // --- ブロック機能のロジック ---
+  // ブロック実行
   const handleBlockUser = async (targetId) => {
-    if (!confirm("このユーザーをブロックしますか？")) return;
+    if (!confirm("このユーザーをブロックしますか？メッセージも非表示になります。")) return;
     
     const { error } = await supabase.from('blocks').insert([
       { blocker_id: ADMIN_ID, blocked_id: targetId }
@@ -69,32 +105,32 @@ export default function AdminPage() {
     if (error) {
       alert("ブロックに失敗しました。テーブル設定を確認してください。");
     } else {
-      alert("ブロックしました。");
       setLongPressedGuestId(null);
-      fetchGuests(); // リスト更新
+      fetchMessages(); // メッセージを再取得して画面から消す
     }
   };
 
-  // 長押し検知用ハンドラー
   const startPress = (guestId) => {
     pressTimerRef.current = setTimeout(() => {
       setLongPressedGuestId(guestId);
-      if (window.navigator.vibrate) window.navigator.vibrate(50); // 軽く振動（Androidのみ）
-    }, 600); // 0.6秒でブロックボタン出現
+      if (window.navigator.vibrate) window.navigator.vibrate(50);
+    }, 600);
   };
 
   const cancelPress = () => {
     if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
   };
 
-  const sortedGuests = useMemo(() => {
-    const guestList = guests.filter(g => g.id !== ADMIN_ID);
-    return guestList.sort((a, b) => {
-      const lastMsgA = [...messages].reverse().find(m => m.user_id === a.id || m.receiver_id === a.id);
-      const lastMsgB = [...messages].reverse().find(m => m.user_id === b.id || m.receiver_id === b.id);
-      return (lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0) - (lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0);
-    });
-  }, [guests, messages]);
+  // サイドバーのゲスト一覧（ブロック済みは除外して表示）
+  const filteredGuests = useMemo(() => {
+    return guests
+      .filter(g => g.id !== ADMIN_ID && !blockedIds.includes(g.id))
+      .sort((a, b) => {
+        const lastMsgA = [...messages].reverse().find(m => m.user_id === a.id || m.receiver_id === a.id);
+        const lastMsgB = [...messages].reverse().find(m => m.user_id === b.id || m.receiver_id === b.id);
+        return (lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0) - (lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0);
+      });
+  }, [guests, messages, blockedIds]);
 
   const renderMessages = () => {
     const filtered = (viewMode === 'DIRECT' 
@@ -108,39 +144,35 @@ export default function AdminPage() {
           const isMe = m.user_id === ADMIN_ID;
           const senderProfile = guests.find(g => g.id === m.user_id);
           const date = new Date(m.created_at);
-          const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
-          const prevMsg = index > 0 ? filtered[index - 1] : null;
-          const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
+          const isNewDay = index === 0 || new Date(filtered[index - 1].created_at).toDateString() !== date.toDateString();
 
           return (
             <div key={m.id}>
               {isNewDay && (
                 <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
-                  <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic' }}>
-                    {dateStr}
+                  <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold' }}>
+                    -{date.toLocaleDateString()}-
                   </div>
                 </div>
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  {!isMe && viewMode !== 'DIRECT' && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="28px" /></div>}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1, maxWidth: '100%' }}>
+                  {!isMe && viewMode !== 'DIRECT' && <Avatar profile={senderProfile} size="28px" />}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1 }}>
                     {!isMe && viewMode === 'GLOBAL' && (
-                      <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>{senderProfile?.username || 'Guest'}</span>
+                      <span style={{ fontSize: '0.7rem', color: '#D4AF37', marginBottom: '4px' }}>{senderProfile?.username || 'Guest'}</span>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
                       <div style={{ 
                           padding: m.is_image ? '5px' : '10px 14px', 
                           background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
                           borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
                           border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
-                          fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+                          fontSize: '0.9rem', color: '#fff'
                         }}>
-                        {m.is_image ? (
-                          <img src={m.content} onLoad={scrollToBottomInstant} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} />
-                        ) : m.content}
+                        {m.is_image ? <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px' }} /> : m.content}
                       </div>
-                      <div style={{ fontSize: '0.5rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px' }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      <div style={{ fontSize: '0.5rem', color: '#D4AF37' }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   </div>
                 </div>
@@ -153,56 +185,27 @@ export default function AdminPage() {
   };
 
   return (
-    <div 
-      onClick={() => setLongPressedGuestId(null)} // 画面のどこかを叩けばブロックボタンを消す
-      style={{ 
-        width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
-        background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
-        WebkitUserSelect: 'none', userSelect: 'none'
-      }}
-    >
-      <header style={{ padding: '30px 15px 15px', background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0, zIndex: 10 }}>
-        <h1 style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', margin: 0, letterSpacing: '3px', color: '#fff' }}>
-          for VAU <span style={{ fontSize: '1.1rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span>
-        </h1>
+    <div onClick={() => setLongPressedGuestId(null)} style={{ width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', background: '#000', color: '#fff', overflow: 'hidden' }}>
+      <header style={{ padding: '20px', background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'center' }}>
+        <h1 style={{ fontSize: '1.5rem', fontStyle: 'italic', margin: 0 }}>for VAU ｰHOSTｰ</h1>
       </header>
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {viewMode === 'DIRECT' && (
-          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
-            {sortedGuests.map(g => (
+          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0' }}>
+            {filteredGuests.map(g => (
               <div 
                 key={g.id} 
-                onMouseDown={() => startPress(g.id)}
-                onMouseUp={cancelPress}
-                onMouseLeave={cancelPress}
-                onTouchStart={() => startPress(g.id)}
-                onTouchEnd={cancelPress}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedGuestId(g.id);
-                }}
+                onMouseDown={() => startPress(g.id)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+                onTouchStart={() => startPress(g.id)} onTouchEnd={cancelPress}
+                onClick={(e) => { e.stopPropagation(); setSelectedGuestId(g.id); }}
                 style={{ position: 'relative', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
               >
                 <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
                 <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px' }}>{g.username?.substring(0, 5)}</div>
                 
-                {/* 長押し時に出現するブロックボタン */}
                 {longPressedGuestId === g.id && (
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleBlockUser(g.id);
-                    }}
-                    style={{
-                      position: 'absolute', top: '0', left: '60px', zIndex: 100,
-                      background: '#ff4444', color: '#fff', border: 'none', borderRadius: '4px',
-                      padding: '8px 12px', fontSize: '0.7rem', fontWeight: 'bold', whiteSpace: 'nowrap',
-                      boxShadow: '0 4px 10px rgba(0,0,0,0.5)'
-                    }}
-                  >
-                    BLOCK
-                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); handleBlockUser(g.id); }} style={{ position: 'absolute', top: '0', left: '60px', zIndex: 100, background: '#ff4444', color: '#fff', border: 'none', borderRadius: '4px', padding: '8px 12px', fontSize: '0.7rem' }}>BLOCK</button>
                 )}
               </div>
             ))}
@@ -213,13 +216,9 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <footer style={{ 
-        padding: '12px 15px', background: '#800020', borderTop: '1px solid #D4AF37', 
-        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px',
-        paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', flexShrink: 0
-      }}>
+      <footer style={{ padding: '15px', background: '#800020', borderTop: '1px solid #D4AF37', display: 'flex', justifyContent: 'center', gap: '40px' }}>
         {['GLOBAL', 'DIRECT'].map(mode => (
-          <button key={mode} onClick={() => setViewMode(mode)} style={{ background: 'transparent', color: viewMode === mode ? '#D4AF37' : 'rgba(255,255,255,0.6)', border: 'none', fontSize: '0.75rem', fontWeight: 'bold', letterSpacing: '2px', padding: '5px 10px', borderBottom: viewMode === mode ? '1px solid #D4AF37' : '1px solid transparent' }}>
+          <button key={mode} onClick={() => setViewMode(mode)} style={{ background: 'transparent', color: viewMode === mode ? '#D4AF37' : '#fff', border: 'none', fontWeight: 'bold', borderBottom: viewMode === mode ? '2px solid #D4AF37' : 'none' }}>
             {mode}
           </button>
         ))}
