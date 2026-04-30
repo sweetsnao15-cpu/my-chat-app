@@ -41,8 +41,8 @@ export default function AdminPage() {
     const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
     if (data) {
       setMessages(data);
-      // データ取得直後に最下部へスクロール
-      setTimeout(() => scrollToBottom('auto'), 0);
+      // データセット直後にスクロール（DOM更新を待つためにsetTimeoutを使用）
+      setTimeout(() => scrollToBottom('auto'), 50);
     }
   }, [scrollToBottom]);
 
@@ -55,6 +55,7 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
+  // メッセージ数が増えた時（新着メッセージ受信時）の自動スクロール
   useEffect(() => { 
     if (messages.length > prevMsgCountRef.current) {
       scrollToBottom('auto');
