@@ -94,10 +94,9 @@ export default function AdminPage() {
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  {/* DIRECTモード以外かつ自分以外の時のみアイコンを表示 */}
                   {!isMe && viewMode !== 'DIRECT' && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="28px" /></div>}
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '100%' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1, maxWidth: '100%' }}>
                     {!isMe && viewMode === 'GLOBAL' && (
                       <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>{senderProfile?.username || 'Guest'}</span>
                     )}
@@ -119,7 +118,7 @@ export default function AdminPage() {
                               maxWidth: '100%', 
                               borderRadius: '10px', 
                               display: 'block',
-                              /* ホストが右クリック・長押しで保存できるように許可 */
+                              WebkitTouchCallout: 'default',
                               WebkitUserSelect: 'auto',
                               userSelect: 'auto',
                               pointerEvents: 'auto'
@@ -145,10 +144,10 @@ export default function AdminPage() {
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
       WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none'
     }}>
-      {/* ヘッダー：高さを上げ、ロゴを大きく調整。-HOST-の部分を小さく */}
+      {/* ヘッダー：背景色を#800020に変更。ロゴを少し右にずらす */}
       <header style={{ 
         padding: '30px 15px 15px', 
-        background: '#800000', 
+        background: '#800020', 
         borderBottom: '1px solid #D4AF37', 
         textAlign: 'center', 
         flexShrink: 0, 
@@ -164,7 +163,8 @@ export default function AdminPage() {
           fontWeight: 'bold', 
           margin: 0, 
           letterSpacing: '3px', 
-          color: '#fff' 
+          color: '#fff',
+          paddingLeft: '20px' /* 全体を少し右にずらす */
         }}>
           for VAU <span style={{ fontSize: '1.1rem', verticalAlign: 'middle' }}>ｰHOSTｰ</span>
         </h1>
@@ -186,8 +186,9 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* フッター：背景色を#800020に変更 */}
       <footer style={{ 
-        padding: '12px 15px', background: '#800000', borderTop: '1px solid #D4AF37', 
+        padding: '12px 15px', background: '#800020', borderTop: '1px solid #D4AF37', 
         display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px',
         paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
         flexShrink: 0, zIndex: 10
