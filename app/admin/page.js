@@ -33,12 +33,14 @@ export default function AdminPage() {
   const [guests, setGuests] = useState([]);
   const [selectedGuestId, setSelectedGuestId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [longPressedGuestId, setLongPressedGuestId] = useState(null);
   const [blockedIds, setBlockedIds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [longPressedGuestId, setLongPressedGuestId] = useState(null);
 
   const scrollRef = useRef(null);
   const pressTimerRef = useRef(null);
+  // ブロックリストをリアルタイム購読内で参照するためのRef
+  const blockedIdsRef = useRef([]);
 
   const scrollToBottomInstant = useCallback(() => {
     if (scrollRef.current) {
@@ -46,10 +48,12 @@ export default function AdminPage() {
     }
   }, []);
 
+  // 初期データ取得
   const fetchInitialData = useCallback(async () => {
     const { data: blockData } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', ADMIN_ID);
     const currentBlocked = blockData?.map(b => b.blocked_id) || [];
     setBlockedIds(currentBlocked);
+    blockedIdsRef.current = currentBlocked;
 
     const { data: profiles } = await supabase.from('profiles').select('*');
     if (profiles) setGuests(profiles);
@@ -64,24 +68,21 @@ export default function AdminPage() {
     setIsLoading(false);
   }, []);
 
+  // リアルタイム購読の設定
   useEffect(() => {
     fetchInitialData();
 
-    // チャンネル名を一意にしてリアルタイム購読を開始
-    const channel = supabase.channel('admin_realtime_sync')
+    const channel = supabase.channel('admin_realtime_all_events')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
         if (payload.eventType === 'INSERT') {
           const newMsg = payload.new;
-          // ブロックリストの状態を考慮しつつメッセージを追加
-          setBlockedIds(currentBlocked => {
-            if (!currentBlocked.includes(newMsg.user_id)) {
-              setMessages(prev => {
-                if (prev.some(m => m.id === newMsg.id)) return prev;
-                return [...prev, newMsg];
-              });
-            }
-            return currentBlocked;
-          });
+          // ブロック中のユーザーでないかRefでチェック
+          if (!blockedIdsRef.current.includes(newMsg.user_id)) {
+            setMessages(prev => {
+              if (prev.some(m => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+          }
         } else if (payload.eventType === 'DELETE') {
           setMessages(prev => prev.filter(m => m.id !== payload.old.id));
         } else if (payload.eventType === 'UPDATE') {
@@ -89,26 +90,33 @@ export default function AdminPage() {
         }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, () => {
+        // ブロック状態が変わったら全データを再同期
         fetchInitialData();
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("Realtime status:", status);
+      });
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchInitialData]);
 
-  // メッセージが更新されたら即座にスクロール
+  // メッセージ更新時のスクロール
   useEffect(() => {
     if (!isLoading) {
-      // DOMの更新を待つためにわずかな遅延を入れると安定します
-      const timer = setTimeout(scrollToBottomInstant, 50);
+      const timer = setTimeout(scrollToBottomInstant, 100);
       return () => clearTimeout(timer);
     }
-  }, [messages, isLoading, viewMode, selectedGuestId, scrollToBottomInstant]);
+  }, [messages.length, viewMode, selectedGuestId, isLoading, scrollToBottomInstant]);
 
   const handleBlockUser = async (targetId) => {
     if (!confirm("このユーザーをブロックしますか？")) return;
     const { error } = await supabase.from('blocks').insert([{ blocker_id: ADMIN_ID, blocked_id: targetId }]);
-    if (!error) { setLongPressedGuestId(null); fetchInitialData(); }
+    if (!error) { 
+      setLongPressedGuestId(null);
+      fetchInitialData();
+    }
   };
 
   const startPress = (guestId) => {
@@ -166,11 +174,7 @@ export default function AdminPage() {
                         fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'serif'
                       }}>
                         {m.is_image ? (
-                          <img 
-                            src={m.content} 
-                            style={{ maxWidth: '100%', borderRadius: '10px' }} 
-                            alt="Message"
-                          />
+                          <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px' }} alt="" />
                         ) : m.content}
                       </div>
                       <div style={{ fontSize: '0.5rem', color: '#D4AF37', fontFamily: 'serif' }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
@@ -192,17 +196,15 @@ export default function AdminPage() {
       style={{ 
         width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
         background: '#000', color: '#fff', overflow: 'hidden',
-        WebkitTapHighlightColor: 'transparent',
-        WebkitUserSelect: 'none', userSelect: 'none'
+        WebkitTapHighlightColor: 'transparent', WebkitUserSelect: 'none', userSelect: 'none'
       }}
     >
       <header style={{ 
-        padding: '20px 20px 20px 20%', // 左の余白を少し減らして左へずらしました（30% -> 20%）
-        background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'left', zIndex: 100
+        padding: '20px 0', background: '#800020', borderBottom: '1px solid #D4AF37', zIndex: 100, position: 'relative', width: '100%'
       }}>
         <h1 style={{ 
-          margin: 0, marginLeft: '10px', 
-          fontFamily: 'serif', fontWeight: 'normal', letterSpacing: '2px', display: 'flex', alignItems: 'flex-end' 
+          margin: 0, paddingLeft: '50%', transform: 'translateX(-62px)', 
+          fontFamily: 'serif', fontWeight: 'normal', letterSpacing: '2px', display: 'flex', alignItems: 'flex-end', whiteSpace: 'nowrap'
         }}>
           <span style={{ fontSize: '1.8rem', fontStyle: 'italic', color: '#fff', marginBottom: '-3px' }}>for VAU</span>
           <span style={{ fontSize: '1.2rem', color: '#D4AF37', marginLeft: '12px' }}>-HOST-</span>
@@ -212,33 +214,21 @@ export default function AdminPage() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
         {viewMode === 'DIRECT' && (
           <div style={{ 
-            width: '85px', borderRight: '1px solid #222', overflowY: 'auto', overflowX: 'visible',
-            display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', zIndex: 20
+            width: '85px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', zIndex: 20
           }}>
             {filteredGuests.map(g => (
               <div 
                 key={g.id} 
-                onMouseDown={() => startPress(g.id)} onMouseUp={cancelPress} onMouseLeave={cancelPress}
-                onTouchStart={() => startPress(g.id)} onTouchEnd={cancelPress}
+                onMouseDown={() => startPress(g.id)} onMouseUp={cancelPress} onTouchStart={() => startPress(g.id)} onTouchEnd={cancelPress}
                 onClick={(e) => { e.stopPropagation(); setSelectedGuestId(g.id); }}
-                style={{ position: 'relative', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', WebkitTapHighlightColor: 'transparent' }}
+                style={{ position: 'relative', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}
               >
                 <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
                 <div style={{ fontSize: '0.6rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px', fontFamily: 'serif', textAlign: 'center', width: '100%', padding: '0 4px' }}>
                   {g.username?.substring(0, 6)}
                 </div>
-                
                 {longPressedGuestId === g.id && (
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleBlockUser(g.id); }} 
-                    style={{ 
-                      position: 'absolute', left: '65px', top: '50%', transform: 'translateY(-50%)',
-                      zIndex: 99999, background: '#800020', color: '#fff', border: '1px solid #D4AF37', 
-                      borderRadius: '8px', padding: '10px 15px', fontSize: '0.8rem', fontWeight: 'bold', 
-                      whiteSpace: 'nowrap', boxShadow: '0 4px 15px rgba(0,0,0,0.8)', fontFamily: 'serif',
-                      WebkitTapHighlightColor: 'transparent'
-                    }}
-                  >
+                  <button onClick={(e) => { e.stopPropagation(); handleBlockUser(g.id); }} style={{ position: 'absolute', left: '65px', top: '50%', transform: 'translateY(-50%)', zIndex: 99999, background: '#800020', color: '#fff', border: '1px solid #D4AF37', borderRadius: '8px', padding: '10px 15px', fontSize: '0.8rem', fontWeight: 'bold', whiteSpace: 'nowrap', boxShadow: '0 4px 15px rgba(0,0,0,0.8)', fontFamily: 'serif' }}>
                     ブロック
                   </button>
                 )}
@@ -246,10 +236,7 @@ export default function AdminPage() {
             ))}
           </div>
         )}
-        <div 
-          style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px', zIndex: 1 }} 
-          ref={scrollRef}
-        >
+        <div style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px', zIndex: 1 }} ref={scrollRef}>
           {renderMessages()}
         </div>
       </div>
@@ -262,10 +249,7 @@ export default function AdminPage() {
             key={mode} 
             onClick={() => setViewMode(mode)} 
             style={{ 
-              background: 'transparent', color: viewMode === mode ? '#D4AF37' : '#fff', 
-              border: 'none', fontWeight: 'bold', fontFamily: 'serif', fontSize: '1.1rem', letterSpacing: '2px',
-              borderBottom: viewMode === mode ? '2px solid #D4AF37' : 'none', paddingBottom: '5px',
-              cursor: 'pointer', outline: 'none', WebkitTapHighlightColor: 'transparent'
+              background: 'transparent', color: viewMode === mode ? '#D4AF37' : '#fff', border: 'none', fontWeight: 'bold', fontFamily: 'serif', fontSize: '1.1rem', letterSpacing: '2px', borderBottom: viewMode === mode ? '2px solid #D4AF37' : 'none', paddingBottom: '5px', cursor: 'pointer', outline: 'none', WebkitTapHighlightColor: 'transparent'
             }}
           >
             {mode}
