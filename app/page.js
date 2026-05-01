@@ -56,7 +56,7 @@ export default function GuestPage() {
       } else {
         setMessages([]);
         setProfile({ username: '', avatar_url: '' });
-        setIsInitialRender(true); // ログアウト時は戻す
+        setIsInitialRender(true);
       }
       setLoading(false);
     });
@@ -67,15 +67,12 @@ export default function GuestPage() {
   useEffect(() => {
     if (messages.length > 0) {
       if (isInitialRender) {
-        // 初回読み込み時は「即座に」一番下へ移動
         if (scrollRef.current) {
           scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-        // 位置調整が終わった頃に表示を開始
         const timer = setTimeout(() => setIsInitialRender(false), 50);
         return () => clearTimeout(timer);
       } else if (messages.length > prevMsgCountRef.current) {
-        // 2回目以降（新着メッセージ）はスムーズにスクロール
         scrollToBottom('smooth');
       }
     }
@@ -214,12 +211,40 @@ export default function GuestPage() {
         </div>
       )}
 
+      {/* 横並びコンテキストメニュー */}
       {contextMenu && (
-        <div style={{ position: 'fixed', top: contextMenu.y - 80, left: contextMenu.x - 60, background: '#1a1a1a', border: '1px solid #800020', borderRadius: '12px', zIndex: 10000, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>
-          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: '1px solid #333' }} onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}>コピー</button>
-          <button style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left', borderBottom: (contextMenu.msg.user_id === user.id) ? '1px solid #333' : 'none' }} onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}>削除</button>
+        <div style={{ 
+          position: 'fixed', 
+          top: contextMenu.y - 70, 
+          left: Math.max(10, Math.min(contextMenu.x - 100, (typeof window !== 'undefined' ? window.innerWidth : 600) - 220)), 
+          background: '#1a1a1a', 
+          border: '1px solid #800020', 
+          borderRadius: '12px', 
+          zIndex: 10000, 
+          display: 'flex', 
+          flexDirection: 'row', 
+          overflow: 'hidden', 
+          boxShadow: '0 4px 20px rgba(0,0,0,0.8)' 
+        }}>
+          <button 
+            style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 18px', fontSize: '0.85rem', cursor: 'pointer', borderRight: '1px solid #333' }} 
+            onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}
+          >
+            コピー
+          </button>
+          <button 
+            style={{ background: 'none', border: 'none', color: '#fff', padding: '12px 18px', fontSize: '0.85rem', cursor: 'pointer', borderRight: (contextMenu.msg.user_id === user.id) ? '1px solid #333' : 'none' }} 
+            onClick={() => { setDeletedIds([...deletedIds, contextMenu.msg.id]); setContextMenu(null); }}
+          >
+            削除
+          </button>
           {contextMenu.msg.user_id === user.id && (
-            <button style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 25px', fontSize: '0.95rem', cursor: 'pointer', textAlign: 'left' }} onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}>送信取消</button>
+            <button 
+              style={{ background: 'none', border: 'none', color: '#ff4d4d', padding: '12px 18px', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 'bold' }} 
+              onClick={async () => { await supabase.from('messages').delete().eq('id', contextMenu.msg.id); setContextMenu(null); }}
+            >
+              送信取消
+            </button>
           )}
         </div>
       )}
@@ -245,7 +270,6 @@ export default function GuestPage() {
         </div>
       </header>
 
-      {/* スクロール跳ね防止を適用したメッセージエリア */}
       <div 
         ref={scrollRef} 
         style={{ 
@@ -253,17 +277,17 @@ export default function GuestPage() {
           overflowY: 'auto', 
           padding: '15px', 
           background: '#050505',
-          opacity: isInitialRender ? 0 : 1, // 準備ができるまで隠す
-          transition: 'opacity 0.25s ease-in' // ふわっと表示
+          opacity: isInitialRender ? 0 : 1, 
+          transition: 'opacity 0.25s ease-in' 
         }}
       >
         <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '20px' }}>
-          {messages.filter(m => !deletedIds.includes(m.id)).map((m, index) => {
+          {messages.filter(m => !deletedIds.includes(m.id)).map((m) => {
             const isMe = m.user_id === user.id;
             const date = new Date(m.created_at);
             const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
             const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-            const filteredMessages = messages.filter(m => !deletedIds.includes(m.id));
+            const filteredMessages = messages.filter(fm => !deletedIds.includes(fm.id));
             const currentMsgIndex = filteredMessages.findIndex(fm => fm.id === m.id);
             const prevMsg = currentMsgIndex > 0 ? filteredMessages[currentMsgIndex - 1] : null;
             const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
