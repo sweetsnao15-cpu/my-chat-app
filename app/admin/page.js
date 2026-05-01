@@ -11,7 +11,7 @@ const Avatar = ({ profile, size = '32px', isSelected = true }) => {
       position: 'relative', width: size, height: size, 
       opacity: isSelected ? 1 : 0.6, flexShrink: 0,
       WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none',
-      WebkitTapHighlightColor: 'transparent' // 青いハイライト防止
+      WebkitTapHighlightColor: 'transparent'
     }}>
       {profile?.avatar_url ? (
         <img 
@@ -41,7 +41,9 @@ export default function AdminPage() {
   const pressTimerRef = useRef(null);
 
   const scrollToBottomInstant = useCallback(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, []);
 
   const fetchInitialData = useCallback(async () => {
@@ -64,18 +66,27 @@ export default function AdminPage() {
 
   useEffect(() => {
     fetchInitialData();
-    const channel = supabase.channel('chat_realtime_sync')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-        setMessages(prev => {
-          if (prev.some(m => m.id === payload.new.id)) return prev;
-          return [...prev, payload.new];
-        });
-      })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
-        setMessages(prev => prev.filter(m => m.id !== payload.old.id));
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
-        setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
+
+    // チャンネル名を一意にしてリアルタイム購読を開始
+    const channel = supabase.channel('admin_realtime_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const newMsg = payload.new;
+          // ブロックリストの状態を考慮しつつメッセージを追加
+          setBlockedIds(currentBlocked => {
+            if (!currentBlocked.includes(newMsg.user_id)) {
+              setMessages(prev => {
+                if (prev.some(m => m.id === newMsg.id)) return prev;
+                return [...prev, newMsg];
+              });
+            }
+            return currentBlocked;
+          });
+        } else if (payload.eventType === 'DELETE') {
+          setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+        } else if (payload.eventType === 'UPDATE') {
+          setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
+        }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, () => {
         fetchInitialData();
@@ -85,8 +96,13 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchInitialData]);
 
+  // メッセージが更新されたら即座にスクロール
   useEffect(() => {
-    if (!isLoading) scrollToBottomInstant();
+    if (!isLoading) {
+      // DOMの更新を待つためにわずかな遅延を入れると安定します
+      const timer = setTimeout(scrollToBottomInstant, 50);
+      return () => clearTimeout(timer);
+    }
   }, [messages, isLoading, viewMode, selectedGuestId, scrollToBottomInstant]);
 
   const handleBlockUser = async (targetId) => {
@@ -176,16 +192,16 @@ export default function AdminPage() {
       style={{ 
         width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
         background: '#000', color: '#fff', overflow: 'hidden',
-        WebkitTapHighlightColor: 'transparent', // 青い枠を防止
-        WebkitUserSelect: 'none', userSelect: 'none' // テキスト選択を防止
+        WebkitTapHighlightColor: 'transparent',
+        WebkitUserSelect: 'none', userSelect: 'none'
       }}
     >
       <header style={{ 
-        padding: '20px 20px 20px 30%', // 左の余白をさらに右へ（22% -> 30%）
+        padding: '20px 20px 20px 20%', // 左の余白を少し減らして左へずらしました（30% -> 20%）
         background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'left', zIndex: 100
       }}>
         <h1 style={{ 
-          margin: 0, marginLeft: '10px', // さらに微調整用のマージン
+          margin: 0, marginLeft: '10px', 
           fontFamily: 'serif', fontWeight: 'normal', letterSpacing: '2px', display: 'flex', alignItems: 'flex-end' 
         }}>
           <span style={{ fontSize: '1.8rem', fontStyle: 'italic', color: '#fff', marginBottom: '-3px' }}>for VAU</span>
