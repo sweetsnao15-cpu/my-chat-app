@@ -1,13 +1,21 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../lib/supabase'; // パスを修正
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
 const Avatar = ({ profile, size = '32px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
-    <div style={{ position: 'relative', width: size, height: size, opacity: isSelected ? 1 : 0.6, flexShrink: 0 }}>
+    <div 
+      // アイコンの長押し・右クリックメニューを無効化
+      onContextMenu={(e) => e.preventDefault()}
+      style={{ 
+        position: 'relative', width: size, height: size, 
+        opacity: isSelected ? 1 : 0.6, flexShrink: 0,
+        pointerEvents: 'auto', WebkitTouchCallout: 'none' // システムメニューを抑制
+      }}
+    >
       {profile?.avatar_url ? (
         <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444' }} alt="" />
       ) : (
@@ -22,7 +30,7 @@ export default function AdminPage() {
   const [guests, setGuests] = useState([]);
   const [selectedGuestId, setSelectedGuestId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [activeMenuId, setActiveMenuId] = useState(null); // メニュー表示用
+  const [activeMenuId, setActiveMenuId] = useState(null);
   
   const scrollRef = useRef(null);
 
@@ -45,7 +53,6 @@ export default function AdminPage() {
   useEffect(() => {
     fetchGuests();
     fetchMessages();
-
     const channel = supabase.channel('admin_all_messages')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
         if (payload.eventType === 'INSERT') {
@@ -58,17 +65,9 @@ export default function AdminPage() {
         }
       })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
-  useEffect(() => {
-    scrollToBottomInstant();
-    const timer = setTimeout(scrollToBottomInstant, 50);
-    return () => clearTimeout(timer);
-  }, [viewMode, selectedGuestId, messages.length, scrollToBottomInstant]);
-
-  // メニューを閉じるためのグローバルクリック
   useEffect(() => {
     const closeMenu = () => setActiveMenuId(null);
     window.addEventListener('click', closeMenu);
@@ -84,9 +83,17 @@ export default function AdminPage() {
     });
   }, [guests, messages]);
 
-  const handleContextMenu = (e, messageId) => {
-    e.preventDefault();
-    setActiveMenuId(messageId);
+  // メッセージ用の長押しメニュー処理
+  const handleContextMenu = (e, message) => {
+    // メッセージが画像でない場合のみ、カスタムメニューを表示する（画像はシステムの「保存」を優先させるため）
+    if (!message.is_image) {
+      e.preventDefault();
+      e.stopPropagation();
+      setActiveMenuId(message.id);
+    } else {
+      // 画像の場合はシステムのメニュー（保存など）を許可するため preventDefault しない
+      e.stopPropagation();
+    }
   };
 
   const renderMessages = () => {
@@ -118,7 +125,7 @@ export default function AdminPage() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
                   {!isMe && viewMode !== 'DIRECT' && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="36px" /></div>}
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1, maxWidth: '100%' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1, maxWidth: '80%' }}>
                     {!isMe && viewMode === 'GLOBAL' && (
                       <span style={{ fontSize: '0.9rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '6px', marginLeft: '2px' }}>
                         {senderProfile?.username || 'Guest'}
@@ -126,24 +133,32 @@ export default function AdminPage() {
                     )}
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%', position: 'relative' }}>
                       <div 
-                        onContextMenu={(e) => handleContextMenu(e, m.id)} // 右クリック/長押し
+                        onContextMenu={(e) => handleContextMenu(e, m)}
                         style={{ 
                           padding: m.is_image ? '5px' : '10px 14px', 
                           background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
                           borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
                           border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
                           fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                          cursor: 'pointer', position: 'relative'
+                          cursor: 'pointer', position: 'relative', minWidth: '60px'
                         }}>
                         {m.is_image ? (
                           <img 
                             src={m.content} 
                             onLoad={scrollToBottomInstant} 
-                            style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} 
+                            style={{ 
+                              maxWidth: '100%', 
+                              borderRadius: '10px', 
+                              display: 'block',
+                              // 画像保存を可能にするための設定
+                              WebkitTouchCallout: 'default', 
+                              WebkitUserSelect: 'all',
+                              userSelect: 'all'
+                            }} 
                           />
                         ) : m.content}
 
-                        {/* 縦並びカスタムメニュー */}
+                        {/* 独自メニュー (テキストメッセージ時のみ表示) */}
                         {activeMenuId === m.id && (
                           <div style={{
                             position: 'absolute',
@@ -157,11 +172,12 @@ export default function AdminPage() {
                             boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
                             display: 'flex',
                             flexDirection: 'column',
-                            minWidth: '120px'
+                            width: 'max-content',
+                            minWidth: '110px'
                           }}>
-                            <button onClick={() => console.log('Edit')} style={{ padding: '10px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'center', fontSize: '0.8rem' }}>編集する</button>
-                            <button onClick={() => console.log('Copy')} style={{ padding: '10px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'center', fontSize: '0.8rem' }}>コピーする</button>
-                            <button onClick={() => console.log('Delete')} style={{ padding: '10px', background: 'none', border: 'none', color: '#ff4444', textAlign: 'center', fontSize: '0.8rem' }}>削除する</button>
+                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem' }}>編集する</button>
+                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem' }}>コピーする</button>
+                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#ff4444', textAlign: 'left', fontSize: '0.85rem' }}>削除する</button>
                           </div>
                         )}
                       </div>
@@ -181,25 +197,14 @@ export default function AdminPage() {
     <div style={{ 
       width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
-      WebkitUserSelect: 'none',
-      userSelect: 'none',
-      WebkitTouchCallout: 'none'
+      // 全体的な長押し抑制 (画像タグ以外)
+      WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none'
     }}>
       <style jsx global>{`
-        * {
-          -webkit-tap-highlight-color: transparent !important;
-          outline: none !important;
-        }
-        ::selection {
-          background: transparent !important;
-          color: inherit !important;
-        }
+        * { -webkit-tap-highlight-color: transparent !important; outline: none !important; }
       `}</style>
 
-      <header style={{ 
-        padding: '30px 15px 15px', background: '#800020', borderBottom: '1px solid #D4AF37', 
-        textAlign: 'center', flexShrink: 0, zIndex: 10, minHeight: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center'
-      }}>
+      <header style={{ padding: '30px 15px 15px', background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0, zIndex: 10, minHeight: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <h1 style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', margin: 0, letterSpacing: '3px', color: '#fff', paddingLeft: '20px' }}>
           for VAU <span style={{ fontSize: '1.1rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span>
         </h1>
@@ -221,24 +226,9 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <footer style={{ 
-        padding: '12px 15px', background: '#800020', borderTop: '1px solid #D4AF37', 
-        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px',
-        paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', flexShrink: 0, zIndex: 10
-      }}>
+      <footer style={{ padding: '12px 15px', background: '#800020', borderTop: '1px solid #D4AF37', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', flexShrink: 0, zIndex: 10 }}>
         {['GLOBAL', 'DIRECT'].map(mode => (
-          <button 
-            key={mode} 
-            onClick={() => setViewMode(mode)} 
-            style={{ 
-              background: 'transparent', color: viewMode === mode ? '#D4AF37' : 'rgba(255,255,255,0.6)', 
-              border: 'none', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '2px', padding: '5px 10px',
-              borderBottom: viewMode === mode ? '1px solid #D4AF37' : '1px solid transparent', outline: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            {mode}
-          </button>
+          <button key={mode} onClick={() => setViewMode(mode)} style={{ background: 'transparent', color: viewMode === mode ? '#D4AF37' : 'rgba(255,255,255,0.6)', border: 'none', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '2px', padding: '5px 10px', borderBottom: viewMode === mode ? '1px solid #D4AF37' : '1px solid transparent', cursor: 'pointer' }}>{mode}</button>
         ))}
       </footer>
     </div>
