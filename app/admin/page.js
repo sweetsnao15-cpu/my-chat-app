@@ -7,22 +7,11 @@ const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 const Avatar = ({ profile, size = '32px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
-    <div style={{ 
-      position: 'relative', width: size, height: size, 
-      opacity: isSelected ? 1 : 0.6, flexShrink: 0,
-      WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none',
-      WebkitTapHighlightColor: 'transparent'
-    }}>
+    <div style={{ position: 'relative', width: size, height: size, opacity: isSelected ? 1 : 0.6, flexShrink: 0 }}>
       {profile?.avatar_url ? (
-        <img 
-          src={profile.avatar_url} 
-          onContextMenu={(e) => e.preventDefault()}
-          onDragStart={(e) => e.preventDefault()}
-          style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444', pointerEvents: 'none' }} 
-          alt="" 
-        />
+        <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444' }} alt="" />
       ) : (
-        <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem', border: '1px solid #D4AF37' }}>{initial}</div>
+        <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.7rem', border: '1px solid #D4AF37' }}>{initial}</div>
       )}
     </div>
   );
@@ -33,111 +22,58 @@ export default function AdminPage() {
   const [guests, setGuests] = useState([]);
   const [selectedGuestId, setSelectedGuestId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [blockedIds, setBlockedIds] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [longPressedGuestId, setLongPressedGuestId] = useState(null);
-
+  
   const scrollRef = useRef(null);
-  const pressTimerRef = useRef(null);
-  // ブロックリストをリアルタイム購読内で参照するためのRef
-  const blockedIdsRef = useRef([]);
+  const prevMsgCountRef = useRef(0);
 
+  // 「ぱっと」最下部を表示させるための即時スクロール関数
   const scrollToBottomInstant = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, []);
 
-  // 初期データ取得
-  const fetchInitialData = useCallback(async () => {
-    const { data: blockData } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', ADMIN_ID);
-    const currentBlocked = blockData?.map(b => b.blocked_id) || [];
-    setBlockedIds(currentBlocked);
-    blockedIdsRef.current = currentBlocked;
-
-    const { data: profiles } = await supabase.from('profiles').select('*');
-    if (profiles) setGuests(profiles);
-
-    let query = supabase.from('messages').select('*');
-    if (currentBlocked.length > 0) {
-      query = query.not('user_id', 'in', `(${currentBlocked.join(',')})`).not('receiver_id', 'in', `(${currentBlocked.join(',')})`);
-    }
-    const { data: msgs } = await query.order('created_at', { ascending: true });
-    
-    if (msgs) setMessages(msgs);
-    setIsLoading(false);
+  const fetchGuests = useCallback(async () => {
+    const { data } = await supabase.from('profiles').select('*');
+    if (data) setGuests(data);
   }, []);
 
-  // リアルタイム購読の設定
-  useEffect(() => {
-    fetchInitialData();
-
-    const channel = supabase.channel('vau_host_sync_v2')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          const newMsg = payload.new;
-          // ブロック中のユーザーでないかRefでチェック
-          if (!blockedIdsRef.current.includes(newMsg.user_id)) {
-            setMessages(prev => {
-              if (prev.some(m => m.id === newMsg.id)) return prev;
-              return [...prev, newMsg];
-            });
-          }
-        } else if (payload.eventType === 'DELETE') {
-          setMessages(prev => prev.filter(m => m.id !== payload.old.id));
-        } else if (payload.eventType === 'UPDATE') {
-          setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, () => {
-        // ブロック状態が変わったら全データを再同期
-        fetchInitialData();
-      })
-      .subscribe((status) => {
-        console.log("Realtime status:", status);
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchInitialData]);
-
-  // メッセージ更新時のスクロール
-  useEffect(() => {
-    if (!isLoading) {
-      const timer = setTimeout(scrollToBottomInstant, 100);
-      return () => clearTimeout(timer);
+  const fetchMessages = useCallback(async () => {
+    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
+    if (data) {
+      setMessages(data);
     }
-  }, [messages.length, viewMode, selectedGuestId, isLoading, scrollToBottomInstant]);
+  }, []);
 
-  const handleBlockUser = async (targetId) => {
-    if (!confirm("このユーザーをブロックしますか？")) return;
-    const { error } = await supabase.from('blocks').insert([{ blocker_id: ADMIN_ID, blocked_id: targetId }]);
-    if (!error) { 
-      setLongPressedGuestId(null);
-      fetchInitialData();
-    }
-  };
+  useEffect(() => {
+    fetchGuests();
+    fetchMessages();
+    const channel = supabase.channel('admin_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchMessages())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchGuests, fetchMessages]);
 
-  const startPress = (guestId) => {
-    pressTimerRef.current = setTimeout(() => {
-      setLongPressedGuestId(guestId);
-      if (window.navigator.vibrate) window.navigator.vibrate(50);
-    }, 600);
-  };
-  const cancelPress = () => { if (pressTimerRef.current) clearTimeout(pressTimerRef.current); };
+  // 表示モード、ゲスト選択、メッセージ更新のたびに「ぱっと」最下部へ
+  useEffect(() => {
+    // 描画が完了したタイミングで即座に位置を合わせる
+    scrollToBottomInstant();
+    // DOMの更新を確実にするため2回実行
+    const timer = setTimeout(scrollToBottomInstant, 0);
+    prevMsgCountRef.current = messages.length;
+    return () => clearTimeout(timer);
+  }, [viewMode, selectedGuestId, messages, scrollToBottomInstant]);
 
-  const filteredGuests = useMemo(() => {
-    return guests.filter(g => g.id !== ADMIN_ID && !blockedIds.includes(g.id))
-      .sort((a, b) => {
-        const lastA = [...messages].reverse().find(m => m.user_id === a.id || m.receiver_id === a.id);
-        const lastB = [...messages].reverse().find(m => m.user_id === b.id || m.receiver_id === b.id);
-        return (lastB ? new Date(lastB.created_at).getTime() : 0) - (lastA ? new Date(lastA.created_at).getTime() : 0);
-      });
-  }, [guests, messages, blockedIds]);
+  const sortedGuests = useMemo(() => {
+    const guestList = guests.filter(g => g.id !== ADMIN_ID);
+    return guestList.sort((a, b) => {
+      const lastMsgA = [...messages].reverse().find(m => m.user_id === a.id || m.receiver_id === a.id);
+      const lastMsgB = [...messages].reverse().find(m => m.user_id === b.id || m.receiver_id === b.id);
+      return (lastMsgB ? new Date(lastMsgB.created_at).getTime() : 0) - (lastMsgA ? new Date(lastMsgA.created_at).getTime() : 0);
+    });
+  }, [guests, messages]);
 
   const renderMessages = () => {
-    if (isLoading) return <div style={{ flex: 1, background: '#050505' }} />;
     const filtered = (viewMode === 'DIRECT' 
       ? messages.filter(m => (m.user_id === selectedGuestId && m.receiver_id === ADMIN_ID) || (m.user_id === ADMIN_ID && m.receiver_id === selectedGuestId))
       : messages
@@ -149,35 +85,54 @@ export default function AdminPage() {
           const isMe = m.user_id === ADMIN_ID;
           const senderProfile = guests.find(g => g.id === m.user_id);
           const date = new Date(m.created_at);
-          const isNewDay = index === 0 || new Date(filtered[index - 1].created_at).toDateString() !== date.toDateString();
+          const dateStr = `-${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}-`;
+          const prevMsg = index > 0 ? filtered[index - 1] : null;
+          const isNewDay = !prevMsg || new Date(prevMsg.created_at).toDateString() !== date.toDateString();
 
           return (
-            <div key={m.id} style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
+            <div key={m.id}>
               {isNewDay && (
                 <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
-                  <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontFamily: 'serif' }}>-{date.toLocaleDateString()}-</div>
+                  <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic' }}>
+                    {dateStr}
+                  </div>
                 </div>
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  {!isMe && viewMode !== 'DIRECT' && <Avatar profile={senderProfile} size="38px" />}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
+                  {!isMe && viewMode !== 'DIRECT' && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="28px" /></div>}
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1, maxWidth: '100%' }}>
                     {!isMe && viewMode === 'GLOBAL' && (
-                      <span style={{ fontSize: '0.95rem', color: '#D4AF37', marginBottom: '6px', fontFamily: 'serif', fontWeight: 'bold' }}>
-                        {senderProfile?.username || 'Guest'}
-                      </span>
+                      <span style={{ fontSize: '0.7rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px' }}>{senderProfile?.username || 'Guest'}</span>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
-                      <div style={{ 
-                        padding: m.is_image ? '5px' : '10px 14px', background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
-                        borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
-                        fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'serif'
-                      }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
+                      <div 
+                        style={{ 
+                          padding: m.is_image ? '5px' : '10px 14px', 
+                          background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
+                          borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
+                          border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
+                          fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                          WebkitUserSelect: 'none', userSelect: 'none'
+                        }}>
                         {m.is_image ? (
-                          <img src={m.content} style={{ maxWidth: '100%', borderRadius: '10px' }} alt="" />
+                          <img 
+                            src={m.content} 
+                            onLoad={scrollToBottomInstant} 
+                            style={{ 
+                              maxWidth: '100%', 
+                              borderRadius: '10px', 
+                              display: 'block',
+                              WebkitTouchCallout: 'default',
+                              WebkitUserSelect: 'none',
+                              userSelect: 'none',
+                              pointerEvents: 'auto'
+                            }} 
+                          />
                         ) : m.content}
                       </div>
-                      <div style={{ fontSize: '0.5rem', color: '#D4AF37', fontFamily: 'serif' }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      <div style={{ fontSize: '0.5rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px', opacity: 0.8 }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   </div>
                 </div>
@@ -190,66 +145,89 @@ export default function AdminPage() {
   };
 
   return (
-    <div 
-      onClick={() => setLongPressedGuestId(null)} 
-      onContextMenu={(e) => e.preventDefault()}
-      style={{ 
-        width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
-        background: '#000', color: '#fff', overflow: 'hidden',
-        WebkitTapHighlightColor: 'transparent', WebkitUserSelect: 'none', userSelect: 'none'
-      }}
-    >
+    <div style={{ 
+      width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
+      background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
+      WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent'
+    }}>
+      <style jsx global>{`
+        * {
+          -webkit-tap-highlight-color: transparent !important;
+          outline: none !important;
+        }
+        ::selection {
+          background: transparent !important;
+          color: inherit !important;
+        }
+        ::-moz-selection {
+          background: transparent !important;
+          color: inherit !important;
+        }
+      `}</style>
+
       <header style={{ 
-        padding: '20px 0', background: '#800020', borderBottom: '1px solid #D4AF37', zIndex: 100, position: 'relative', width: '100%'
+        padding: '30px 15px 15px', 
+        background: '#800020', 
+        borderBottom: '1px solid #D4AF37', 
+        textAlign: 'center', 
+        flexShrink: 0, 
+        zIndex: 10,
+        minHeight: '80px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
       }}>
         <h1 style={{ 
-          margin: 0, paddingLeft: '50%', transform: 'translateX(-62px)', 
-          fontFamily: 'serif', fontWeight: 'normal', letterSpacing: '2px', display: 'flex', alignItems: 'flex-end', whiteSpace: 'nowrap'
+          fontSize: '1.8rem', 
+          fontStyle: 'italic', 
+          fontWeight: 'bold', 
+          margin: 0, 
+          letterSpacing: '3px', 
+          color: '#fff',
+          paddingLeft: '20px' 
         }}>
-          <span style={{ fontSize: '1.8rem', fontStyle: 'italic', color: '#fff', marginBottom: '-3px' }}>for VAU</span>
-          <span style={{ fontSize: '1.2rem', color: '#D4AF37', marginLeft: '12px' }}>-HOST-</span>
+          for VAU <span style={{ fontSize: '1.1rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span>
         </h1>
       </header>
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {viewMode === 'DIRECT' && (
-          <div style={{ 
-            width: '85px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', zIndex: 20
-          }}>
-            {filteredGuests.map(g => (
-              <div 
-                key={g.id} 
-                onMouseDown={() => startPress(g.id)} onMouseUp={cancelPress} onTouchStart={() => startPress(g.id)} onTouchEnd={cancelPress}
-                onClick={(e) => { e.stopPropagation(); setSelectedGuestId(g.id); }}
-                style={{ position: 'relative', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}
-              >
+          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
+            {sortedGuests.map(g => (
+              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', WebkitTapHighlightColor: 'transparent' }}>
                 <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
-                <div style={{ fontSize: '0.6rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px', fontFamily: 'serif', textAlign: 'center', width: '100%', padding: '0 4px' }}>
-                  {g.username?.substring(0, 6)}
-                </div>
-                {longPressedGuestId === g.id && (
-                  <button onClick={(e) => { e.stopPropagation(); handleBlockUser(g.id); }} style={{ position: 'absolute', left: '65px', top: '50%', transform: 'translateY(-50%)', zIndex: 99999, background: '#800020', color: '#fff', border: '1px solid #D4AF37', borderRadius: '8px', padding: '10px 15px', fontSize: '0.8rem', fontWeight: 'bold', whiteSpace: 'nowrap', boxShadow: '0 4px 15px rgba(0,0,0,0.8)', fontFamily: 'serif' }}>
-                    ブロック
-                  </button>
-                )}
+                <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px' }}>{g.username?.substring(0, 5)}</div>
               </div>
             ))}
           </div>
         )}
-        <div style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px', zIndex: 1 }} ref={scrollRef}>
+        <div style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px' }} ref={scrollRef}>
           {renderMessages()}
         </div>
       </div>
 
       <footer style={{ 
-        padding: '15px', background: '#800020', borderTop: '1px solid #D4AF37', display: 'flex', justifyContent: 'center', gap: '40px', zIndex: 100
+        padding: '12px 15px', background: '#800020', borderTop: '1px solid #D4AF37', 
+        display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px',
+        paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
+        flexShrink: 0, zIndex: 10
       }}>
         {['GLOBAL', 'DIRECT'].map(mode => (
           <button 
             key={mode} 
             onClick={() => setViewMode(mode)} 
             style={{ 
-              background: 'transparent', color: viewMode === mode ? '#D4AF37' : '#fff', border: 'none', fontWeight: 'bold', fontFamily: 'serif', fontSize: '1.1rem', letterSpacing: '2px', borderBottom: viewMode === mode ? '2px solid #D4AF37' : 'none', paddingBottom: '5px', cursor: 'pointer', outline: 'none', WebkitTapHighlightColor: 'transparent'
+              background: 'transparent', 
+              color: viewMode === mode ? '#D4AF37' : 'rgba(255,255,255,0.6)', 
+              border: 'none', 
+              fontSize: '0.75rem', 
+              fontWeight: 'bold', 
+              letterSpacing: '2px',
+              padding: '5px 10px',
+              borderBottom: viewMode === mode ? '1px solid #D4AF37' : '1px solid transparent',
+              transition: 'all 0.2s ease',
+              WebkitTapHighlightColor: 'transparent',
+              outline: 'none'
             }}
           >
             {mode}
