@@ -45,7 +45,6 @@ export default function AdminPage() {
     fetchGuests();
     fetchMessages();
 
-    // リアルタイム購読を最適化
     const channel = supabase.channel('admin_all_messages')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
         if (payload.eventType === 'INSERT') {
@@ -54,7 +53,6 @@ export default function AdminPage() {
             return [...prev, payload.new];
           });
         } else {
-          // UPDATEやDELETE時も再取得して整合性を保つ
           fetchMessages();
         }
       })
@@ -105,11 +103,9 @@ export default function AdminPage() {
               )}
               <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  {/* アイコンサイズを 28px -> 36px にアップ */}
                   {!isMe && viewMode !== 'DIRECT' && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="36px" /></div>}
                   
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1, maxWidth: '100%' }}>
-                    {/* 名前を 0.7rem -> 0.9rem にアップ、マージンも微調整 */}
                     {!isMe && viewMode === 'GLOBAL' && (
                       <span style={{ fontSize: '0.9rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '6px', marginLeft: '2px' }}>
                         {senderProfile?.username || 'Guest'}
@@ -162,7 +158,7 @@ export default function AdminPage() {
         {viewMode === 'DIRECT' && (
           <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
             {sortedGuests.map(g => (
-              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: center }}>
+              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
                 <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px' }}>{g.username?.substring(0, 5)}</div>
               </div>
