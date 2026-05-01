@@ -9,17 +9,28 @@ const Avatar = ({ profile, size = '32px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
     <div 
-      // アイコンの長押し・右クリックメニューを完全に無効化
+      // アイコン全体の長押しメニューを無効化
       onContextMenu={(e) => e.preventDefault()}
       style={{ 
         position: 'relative', width: size, height: size, 
         opacity: isSelected ? 1 : 0.6, flexShrink: 0,
-        WebkitTouchCallout: 'none', // iOSでの長押しを抑制
-        userSelect: 'none'
+        WebkitTouchCallout: 'none', // iOSでの長押しプレビュー抑制
+        userSelect: 'none',
+        WebkitUserSelect: 'none'
       }}
     >
       {profile?.avatar_url ? (
-        <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: isSelected ? '1px solid #D4AF37' : '1px solid #444' }} alt="" />
+        <img 
+          src={profile.avatar_url} 
+          draggable="false" // ドラッグによる画像浮き上がりを防止
+          style={{ 
+            width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', 
+            border: isSelected ? '1px solid #D4AF37' : '1px solid #444',
+            pointerEvents: 'none', // 画像単体へのタッチイベントを無効化（親のdivで制御）
+            WebkitTouchCallout: 'none'
+          }} 
+          alt="" 
+        />
       ) : (
         <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '0.8rem', border: '1px solid #D4AF37' }}>{initial}</div>
       )}
@@ -88,13 +99,11 @@ export default function AdminPage() {
   }, [guests, messages]);
 
   const handleContextMenu = (e, message) => {
-    // 画像メッセージの場合はブラウザ標準メニュー（保存）を優先するため、カスタムメニューを表示しない
     if (!message.is_image) {
       e.preventDefault();
       e.stopPropagation();
       setActiveMenuId(message.id);
     } else {
-      // 画像の場合はイベントを伝播させつつ、preventDefaultしない（保存メニューを出すため）
       e.stopPropagation();
     }
   };
@@ -153,7 +162,6 @@ export default function AdminPage() {
                               maxWidth: '100%', 
                               borderRadius: '10px', 
                               display: 'block',
-                              // 画像保存を有効化するためのスタイル
                               WebkitTouchCallout: 'default',
                               WebkitUserSelect: 'all',
                               userSelect: 'all'
@@ -161,7 +169,6 @@ export default function AdminPage() {
                           />
                         ) : m.content}
 
-                        {/* テキストメッセージ用の縦並びカスタムメニュー */}
                         {activeMenuId === m.id && (
                           <div style={{
                             position: 'absolute',
@@ -179,9 +186,9 @@ export default function AdminPage() {
                             minWidth: '120px',
                             overflow: 'hidden'
                           }}>
-                            <button onClick={(e) => { e.stopPropagation(); console.log('Edit'); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem', cursor: 'pointer' }}>編集する</button>
-                            <button onClick={(e) => { e.stopPropagation(); console.log('Copy'); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem', cursor: 'pointer' }}>コピーする</button>
-                            <button onClick={(e) => { e.stopPropagation(); console.log('Delete'); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#ff4444', textAlign: 'left', fontSize: '0.85rem', cursor: 'pointer' }}>削除する</button>
+                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem' }}>編集する</button>
+                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem' }}>コピーする</button>
+                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#ff4444', textAlign: 'left', fontSize: '0.85rem' }}>削除する</button>
                           </div>
                         )}
                       </div>
@@ -201,7 +208,6 @@ export default function AdminPage() {
     <div style={{ 
       width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
-      // 画像以外での意図しない動作を抑制
       WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none'
     }}>
       <style jsx global>{`
