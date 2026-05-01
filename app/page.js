@@ -15,6 +15,9 @@ export default function GuestPage() {
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [deletedIds, setDeletedIds] = useState([]); 
+  
+  // スクロール跳ね防止用のステート
+  const [isInitialRender, setIsInitialRender] = useState(true);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,12 +29,14 @@ export default function GuestPage() {
   const longPressTimer = useRef(null);
   const prevMsgCountRef = useRef(0);
 
+  // スクロール処理の定義
   const scrollToBottom = useCallback((behavior = 'auto') => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior });
     }
   }, []);
 
+  // セッション確認
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -42,6 +47,7 @@ export default function GuestPage() {
       setLoading(false);
     };
     checkSession();
+    
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -50,19 +56,33 @@ export default function GuestPage() {
       } else {
         setMessages([]);
         setProfile({ username: '', avatar_url: '' });
+        setIsInitialRender(true); // ログアウト時は戻す
       }
       setLoading(false);
     });
     return () => authListener.subscription.unsubscribe();
   }, []);
 
+  // メッセージ監視 & スクロール制御
   useEffect(() => {
-    if (messages.length > prevMsgCountRef.current) {
-      requestAnimationFrame(() => scrollToBottom('auto'));
+    if (messages.length > 0) {
+      if (isInitialRender) {
+        // 初回読み込み時は「即座に」一番下へ移動
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+        // 位置調整が終わった頃に表示を開始
+        const timer = setTimeout(() => setIsInitialRender(false), 50);
+        return () => clearTimeout(timer);
+      } else if (messages.length > prevMsgCountRef.current) {
+        // 2回目以降（新着メッセージ）はスムーズにスクロール
+        scrollToBottom('smooth');
+      }
     }
     prevMsgCountRef.current = messages.length;
-  }, [messages, scrollToBottom]);
+  }, [messages, isInitialRender, scrollToBottom]);
 
+  // リアルタイム購読
   useEffect(() => {
     if (!user) return;
     const channel = supabase.channel(`room_${user.id}`)
@@ -89,7 +109,9 @@ export default function GuestPage() {
 
   const fetchMessages = async (userId) => {
     const { data } = await supabase.from('messages').select('*').or(`user_id.eq.${userId},receiver_id.eq.${userId}`).order('created_at', { ascending: true });
-    if (data) setMessages(data);
+    if (data) {
+      setMessages(data);
+    }
   };
 
   const handleSend = async (content, isImage = false) => {
@@ -223,7 +245,18 @@ export default function GuestPage() {
         </div>
       </header>
 
-      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '15px', background: '#050505' }}>
+      {/* スクロール跳ね防止を適用したメッセージエリア */}
+      <div 
+        ref={scrollRef} 
+        style={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          padding: '15px', 
+          background: '#050505',
+          opacity: isInitialRender ? 0 : 1, // 準備ができるまで隠す
+          transition: 'opacity 0.25s ease-in' // ふわっと表示
+        }}
+      >
         <div style={{ maxWidth: '600px', margin: '0 auto', paddingBottom: '20px' }}>
           {messages.filter(m => !deletedIds.includes(m.id)).map((m, index) => {
             const isMe = m.user_id === user.id;
@@ -246,11 +279,9 @@ export default function GuestPage() {
                   <div onContextMenu={(e) => openMenu(e, m)} onTouchStart={(e) => handleTouchStart(e, m)} onTouchEnd={handleTouchEnd} style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', maxWidth: '100%' }}>
                     <div style={{ 
                       padding: m.is_image ? '5px' : '12px 16px', 
-                      // ホスト側と背景色を統一
                       background: isMe ? 'rgba(26, 26, 26, 0.75)' : 'rgba(80, 0, 0, 0.75)', 
                       backdropFilter: 'blur(4px)', 
                       borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                      // ホスト側のボーダー設定を適用
                       border: isMe ? '1px solid #D4AF37' : '1px solid rgba(128, 0, 0, 0.3)', 
                       fontSize: '0.95rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word' 
                     }}>
