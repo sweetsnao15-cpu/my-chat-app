@@ -72,7 +72,7 @@ export default function AdminPage() {
   useEffect(() => {
     fetchInitialData();
 
-    const channel = supabase.channel('admin_realtime_all_events')
+    const channel = supabase.channel('vau_host_sync_v2')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
         if (payload.eventType === 'INSERT') {
           const newMsg = payload.new;
