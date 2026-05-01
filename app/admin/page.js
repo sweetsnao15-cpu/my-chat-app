@@ -143,8 +143,24 @@ export default function AdminPage() {
   return (
     <div style={{ 
       width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
-      background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif'
+      background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
+      // 青い選択を防止するためのスタイルを追加
+      WebkitUserSelect: 'none',
+      userSelect: 'none',
+      WebkitTouchCallout: 'none'
     }}>
+      {/* グローバルCSSでタップ時のハイライトとアウトラインを無効化 */}
+      <style jsx global>{`
+        * {
+          -webkit-tap-highlight-color: transparent !important;
+          outline: none !important;
+        }
+        ::selection {
+          background: transparent !important;
+          color: inherit !important;
+        }
+      `}</style>
+
       <header style={{ 
         padding: '30px 15px 15px', background: '#800020', borderBottom: '1px solid #D4AF37', 
         textAlign: 'center', flexShrink: 0, zIndex: 10, minHeight: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -182,7 +198,8 @@ export default function AdminPage() {
             style={{ 
               background: 'transparent', color: viewMode === mode ? '#D4AF37' : 'rgba(255,255,255,0.6)', 
               border: 'none', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '2px', padding: '5px 10px',
-              borderBottom: viewMode === mode ? '1px solid #D4AF37' : '1px solid transparent', outline: 'none'
+              borderBottom: viewMode === mode ? '1px solid #D4AF37' : '1px solid transparent', outline: 'none',
+              cursor: 'pointer'
             }}
           >
             {mode}
