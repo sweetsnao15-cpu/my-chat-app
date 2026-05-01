@@ -200,8 +200,16 @@ export default function GuestPage() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 20000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(10px)' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: '#111', border: '1px solid #D4AF37', borderRadius: '20px', padding: '30px', width: '100%', maxWidth: '400px', textAlign: 'center' }}>
             <h2 style={{ color: '#D4AF37', marginBottom: '20px', fontStyle: 'italic' }}>PROFILE SETTINGS</h2>
-            <div style={{ position: 'relative', width: '100px', height: '100px', margin: '0 auto 20px', cursor: 'pointer' }} onClick={() => avatarFileInputRef.current.click()}>
-              {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid #D4AF37' }} /> : <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #D4AF37' }}>UP</div>}
+            <div style={{ position: 'relative', width: '100px', height: '100px', margin: '0 auto 20px', cursor: 'pointer', WebkitTouchCallout: 'none' }} onClick={() => avatarFileInputRef.current.click()}>
+              {profile.avatar_url ? (
+                <img 
+                  src={profile.avatar_url} 
+                  draggable="false"
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '2px solid #D4AF37', pointerEvents: 'none', WebkitTouchCallout: 'none' }} 
+                />
+              ) : (
+                <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #D4AF37' }}>UP</div>
+              )}
               <input type="file" ref={avatarFileInputRef} hidden accept="image/*" onChange={handleAvatarUpload} />
             </div>
             <input type="text" value={profile.username} onChange={(e) => setProfile(prev => ({ ...prev, username: e.target.value }))} placeholder="Username" style={{ width: '100%', background: '#000', border: '1px solid #333', borderRadius: '10px', padding: '12px', color: '#fff', marginBottom: '10px', textAlign: 'center' }} />
@@ -240,8 +248,24 @@ export default function GuestPage() {
         <div style={{ textAlign: 'center' }}>
           <span style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', letterSpacing: '3px', color: '#fff' }}>for VAU</span>
         </div>
-        <div onClick={() => setShowSettings(!showSettings)} style={{ cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', border: '1px solid #D4AF37', overflow: 'hidden', background: '#333', justifySelf: 'end' }}>
-          {profile.avatar_url ? <img src={profile.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>GUEST</div>}
+        <div 
+          onClick={() => setShowSettings(!showSettings)} 
+          onContextMenu={(e) => e.preventDefault()}
+          style={{ 
+            cursor: 'pointer', width: '45px', height: '45px', borderRadius: '50%', 
+            border: '1px solid #D4AF37', overflow: 'hidden', background: '#333', justifySelf: 'end',
+            WebkitTouchCallout: 'none', userSelect: 'none'
+          }}
+        >
+          {profile.avatar_url ? (
+            <img 
+              src={profile.avatar_url} 
+              draggable="false"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', WebkitTouchCallout: 'none' }} 
+            />
+          ) : (
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem' }}>GUEST</div>
+          )}
         </div>
       </header>
 
@@ -289,6 +313,7 @@ export default function GuestPage() {
                         <img 
                           src={m.content} 
                           onLoad={() => scrollToBottom('auto')} 
+                          draggable="false"
                           style={{ 
                             maxWidth: '100%', 
                             borderRadius: '10px', 
