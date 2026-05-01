@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { supabase } from '../lib/supabase'; // パスを修正
+// app/admin/page.js から見た lib/supabase への正しいパス
+import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
 
@@ -8,12 +9,13 @@ const Avatar = ({ profile, size = '32px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
     <div 
-      // アイコンの長押し・右クリックメニューを無効化
+      // アイコンの長押し・右クリックメニューを完全に無効化
       onContextMenu={(e) => e.preventDefault()}
       style={{ 
         position: 'relative', width: size, height: size, 
         opacity: isSelected ? 1 : 0.6, flexShrink: 0,
-        pointerEvents: 'auto', WebkitTouchCallout: 'none' // システムメニューを抑制
+        WebkitTouchCallout: 'none', // iOSでの長押しを抑制
+        userSelect: 'none'
       }}
     >
       {profile?.avatar_url ? (
@@ -53,6 +55,7 @@ export default function AdminPage() {
   useEffect(() => {
     fetchGuests();
     fetchMessages();
+
     const channel = supabase.channel('admin_all_messages')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
         if (payload.eventType === 'INSERT') {
@@ -65,6 +68,7 @@ export default function AdminPage() {
         }
       })
       .subscribe();
+
     return () => { supabase.removeChannel(channel); };
   }, [fetchGuests, fetchMessages]);
 
@@ -83,15 +87,14 @@ export default function AdminPage() {
     });
   }, [guests, messages]);
 
-  // メッセージ用の長押しメニュー処理
   const handleContextMenu = (e, message) => {
-    // メッセージが画像でない場合のみ、カスタムメニューを表示する（画像はシステムの「保存」を優先させるため）
+    // 画像メッセージの場合はブラウザ標準メニュー（保存）を優先するため、カスタムメニューを表示しない
     if (!message.is_image) {
       e.preventDefault();
       e.stopPropagation();
       setActiveMenuId(message.id);
     } else {
-      // 画像の場合はシステムのメニュー（保存など）を許可するため preventDefault しない
+      // 画像の場合はイベントを伝播させつつ、preventDefaultしない（保存メニューを出すため）
       e.stopPropagation();
     }
   };
@@ -150,15 +153,15 @@ export default function AdminPage() {
                               maxWidth: '100%', 
                               borderRadius: '10px', 
                               display: 'block',
-                              // 画像保存を可能にするための設定
-                              WebkitTouchCallout: 'default', 
+                              // 画像保存を有効化するためのスタイル
+                              WebkitTouchCallout: 'default',
                               WebkitUserSelect: 'all',
                               userSelect: 'all'
                             }} 
                           />
                         ) : m.content}
 
-                        {/* 独自メニュー (テキストメッセージ時のみ表示) */}
+                        {/* テキストメッセージ用の縦並びカスタムメニュー */}
                         {activeMenuId === m.id && (
                           <div style={{
                             position: 'absolute',
@@ -173,11 +176,12 @@ export default function AdminPage() {
                             display: 'flex',
                             flexDirection: 'column',
                             width: 'max-content',
-                            minWidth: '110px'
+                            minWidth: '120px',
+                            overflow: 'hidden'
                           }}>
-                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem' }}>編集する</button>
-                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem' }}>コピーする</button>
-                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#ff4444', textAlign: 'left', fontSize: '0.85rem' }}>削除する</button>
+                            <button onClick={(e) => { e.stopPropagation(); console.log('Edit'); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem', cursor: 'pointer' }}>編集する</button>
+                            <button onClick={(e) => { e.stopPropagation(); console.log('Copy'); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem', cursor: 'pointer' }}>コピーする</button>
+                            <button onClick={(e) => { e.stopPropagation(); console.log('Delete'); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#ff4444', textAlign: 'left', fontSize: '0.85rem', cursor: 'pointer' }}>削除する</button>
                           </div>
                         )}
                       </div>
@@ -197,11 +201,12 @@ export default function AdminPage() {
     <div style={{ 
       width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
-      // 全体的な長押し抑制 (画像タグ以外)
+      // 画像以外での意図しない動作を抑制
       WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none'
     }}>
       <style jsx global>{`
         * { -webkit-tap-highlight-color: transparent !important; outline: none !important; }
+        ::selection { background: transparent !important; color: inherit !important; }
       `}</style>
 
       <header style={{ padding: '30px 15px 15px', background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0, zIndex: 10, minHeight: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
