@@ -119,7 +119,6 @@ export default function GuestPage() {
   const openMenu = (e, msg) => {
     e.preventDefault();
     const y = e.clientY || (e.touches && e.touches[0].clientY);
-    // x軸は無視し、中央に表示するためのフラグとしてmsgのみ管理
     setContextMenu({ y, msg });
   };
 
@@ -154,7 +153,28 @@ export default function GuestPage() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert("ログインエラー: " + error.message);
+  };
+
+  // 新規作成用の関数
+  const handleSignUp = async () => {
+    if (!email || !password) {
+      alert("EmailとPasswordを入力してください");
+      return;
+    }
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    
+    if (error) {
+      alert("新規作成エラー: " + error.message);
+      return;
+    }
+
+    if (data?.user) {
+      // 登録成功時にprofilesテーブルに空のレコードを作成
+      await supabase.from('profiles').upsert({ id: data.user.id, username: 'GUEST' });
+      alert("アカウントを作成しました。ログインしてください。");
+    }
   };
 
   if (loading) return <div style={{ height: '100dvh', background: '#000' }} />;
@@ -168,7 +188,10 @@ export default function GuestPage() {
             <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
             <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '12px', padding: '18px', color: '#fff', fontSize: '1rem', outline: 'none' }} />
           </div>
-          <button type="submit" style={{ width: '100%', background: '#800020', color: '#fff', border: 'none', padding: '18px', borderRadius: '12px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold' }}>LOGIN</button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button type="submit" style={{ width: '100%', background: '#800020', color: '#fff', border: 'none', padding: '18px', borderRadius: '12px', cursor: 'pointer', fontSize: '1.1rem', fontWeight: 'bold' }}>LOGIN</button>
+            <button type="button" onClick={handleSignUp} style={{ width: '100%', background: 'transparent', color: '#800020', border: '1px solid #800020', padding: '12px', borderRadius: '12px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 'bold' }}>SIGN UP</button>
+          </div>
         </form>
       </div>
     );
@@ -207,7 +230,6 @@ export default function GuestPage() {
         </div>
       )}
 
-      {/* メニューの表示ロジック修正：画面中央に縦並びで固定 */}
       {contextMenu && (
         <div style={{ 
           position: 'fixed', 
@@ -262,7 +284,6 @@ export default function GuestPage() {
               <div key={m.id}>
                 {isNewDay && (
                   <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
-                    {/* 透過(opacity)を削除 */}
                     <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic' }}>{dateStr}</div>
                   </div>
                 )}
