@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-// app/admin/page.js から見た lib/supabase への正しいパス
 import { supabase } from '../../lib/supabase';
 
 const ADMIN_ID = "bed1d346-5186-49cb-a371-1aad719c2a56";
@@ -9,12 +8,11 @@ const Avatar = ({ profile, size = '32px', isSelected = true }) => {
   const initial = profile?.username ? Array.from(profile.username)[0].toUpperCase() : "V";
   return (
     <div 
-      // アイコン全体の長押しメニューを無効化
       onContextMenu={(e) => e.preventDefault()}
       style={{ 
         position: 'relative', width: size, height: size, 
         opacity: isSelected ? 1 : 0.6, flexShrink: 0,
-        WebkitTouchCallout: 'none', // iOSでの長押しプレビュー抑制
+        WebkitTouchCallout: 'none',
         userSelect: 'none',
         WebkitUserSelect: 'none'
       }}
@@ -22,11 +20,11 @@ const Avatar = ({ profile, size = '32px', isSelected = true }) => {
       {profile?.avatar_url ? (
         <img 
           src={profile.avatar_url} 
-          draggable="false" // ドラッグによる画像浮き上がりを防止
+          draggable="false" 
           style={{ 
             width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', 
             border: isSelected ? '1px solid #D4AF37' : '1px solid #444',
-            pointerEvents: 'none', // 画像単体へのタッチイベントを無効化（親のdivで制御）
+            pointerEvents: 'none',
             WebkitTouchCallout: 'none'
           }} 
           alt="" 
@@ -58,30 +56,50 @@ export default function AdminPage() {
     if (data) setGuests(data);
   }, []);
 
-  const fetchMessages = useCallback(async () => {
-    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
-    if (data) setMessages(data);
-  }, []);
+  // 初期ロード：直近50件のみ取得
+  const fetchInitialMessages = useCallback(async () => {
+    const { data } = await supabase
+      .from('messages')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    
+    if (data) {
+      // 画面表示用に昇順（古い順）に戻す
+      setMessages(data.reverse());
+      // 最初の読み込み後に一番下へ
+      setTimeout(scrollToBottomInstant, 100);
+    }
+  }, [scrollToBottomInstant]);
 
   useEffect(() => {
     fetchGuests();
-    fetchMessages();
+    fetchInitialMessages();
 
     const channel = supabase.channel('admin_all_messages')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setMessages(prev => {
-            if (prev.some(m => m.id === payload.new.id)) return prev;
-            return [...prev, payload.new];
-          });
-        } else {
-          fetchMessages();
-        }
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        setMessages(prev => {
+          // 重複チェック
+          if (prev.some(m => m.id === payload.new.id)) return prev;
+          // 新しいメッセージを末尾に継ぎ足し
+          const updated = [...prev, payload.new];
+          return updated;
+        });
+        // メッセージ追加後にスクロール
+        setTimeout(scrollToBottomInstant, 50);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
+        // 削除されたメッセージを除外
+        setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
+        // 更新（既読や編集）があった場合、該当メッセージを置き換え
+        setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [fetchGuests, fetchMessages]);
+  }, [fetchGuests, fetchInitialMessages, scrollToBottomInstant]);
 
   useEffect(() => {
     const closeMenu = () => setActiveMenuId(null);
