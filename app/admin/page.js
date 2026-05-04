@@ -184,14 +184,13 @@ export default function AdminPage() {
         textAlign: 'center', 
         flexShrink: 0, 
         zIndex: 10, 
-        height: '90px', // 全体の高さは90pxを維持
+        height: '90px', 
         display: 'flex', 
         flexDirection: 'column',
         justifyContent: 'flex-start',
         alignItems: 'center',
         boxSizing: 'border-box'
       }}>
-        {/* タイトル上の余白を35pxに設定 */}
         <div style={{ height: '35px', flexShrink: 0 }} />
         
         <h1 style={{ 
@@ -210,11 +209,23 @@ export default function AdminPage() {
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {viewMode === 'DIRECT' && (
-          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
+          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '25px', padding: '15px 5px', flexShrink: 0 }}>
             {sortedGuests.map(g => (
-              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
                 <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
-                <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px' }}>{g.username?.substring(0, 5)}</div>
+                {/* 名前を中央揃えですべて表示。幅を100%にし、折り返しを許可 */}
+                <div style={{ 
+                  fontSize: '0.6rem', 
+                  color: selectedGuestId === g.id ? '#D4AF37' : '#888', 
+                  marginTop: '6px',
+                  textAlign: 'center',
+                  width: '100%',
+                  wordBreak: 'break-all',
+                  lineHeight: '1.2',
+                  padding: '0 2px'
+                }}>
+                  {g.username || 'Guest'}
+                </div>
               </div>
             ))}
           </div>
