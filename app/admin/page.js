@@ -184,18 +184,18 @@ export default function AdminPage() {
         textAlign: 'center', 
         flexShrink: 0, 
         zIndex: 10, 
-        height: '110px', // スペーサーを45pxにしたため、全体の高さも少し拡張
+        height: '90px', // 全体の高さを90pxに固定
         display: 'flex', 
         flexDirection: 'column',
         justifyContent: 'flex-start',
         alignItems: 'center',
         boxSizing: 'border-box'
       }}>
-        {/* スペーサーを45pxに設定 */}
+        {/* タイトル上の余白を45pxに設定 */}
         <div style={{ height: '45px', flexShrink: 0 }} />
         
         <h1 style={{ 
-          fontSize: '1.8rem', // フォントサイズを1.8に拡大
+          fontSize: '1.8rem', 
           fontStyle: 'italic', 
           fontWeight: 'bold', 
           margin: 0, 
@@ -204,8 +204,7 @@ export default function AdminPage() {
           paddingLeft: '15px',
           lineHeight: '1.2'
         }}>
-          for VAU <span style={{ fontSize: '1.2rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span> 
-          {/* サブフォントサイズを1.2に拡大 */}
+          for VAU <span style={{ fontSize: '1.2rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span>
         </h1>
       </header>
 
