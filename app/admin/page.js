@@ -184,15 +184,15 @@ export default function AdminPage() {
         textAlign: 'center', 
         flexShrink: 0, 
         zIndex: 10, 
-        height: '90px', // 全体の高さを90pxに固定
+        height: '90px', // 全体の高さは90pxを維持
         display: 'flex', 
         flexDirection: 'column',
         justifyContent: 'flex-start',
         alignItems: 'center',
         boxSizing: 'border-box'
       }}>
-        {/* タイトル上の余白を45pxに設定 */}
-        <div style={{ height: '45px', flexShrink: 0 }} />
+        {/* タイトル上の余白を35pxに設定 */}
+        <div style={{ height: '35px', flexShrink: 0 }} />
         
         <h1 style={{ 
           fontSize: '1.8rem', 
