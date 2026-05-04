@@ -191,8 +191,8 @@ export default function AdminPage() {
         alignItems: 'center',
         boxSizing: 'border-box'
       }}>
-        {/* タイトルの上に10px分追加 */}
-        <div style={{ height: '10px', flexShrink: 0 }} />
+        {/* 真ん中より少し下に下げるため、タイトルの上の隙間を25pxに設定 */}
+        <div style={{ height: '25px', flexShrink: 0 }} />
         
         <h1 style={{ 
           fontSize: '1.6rem', 
