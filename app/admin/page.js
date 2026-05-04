@@ -177,19 +177,31 @@ export default function AdminPage() {
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
       WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none'
     }}>
+      {/* ゲスト側の高さ(80px)と計算方法(border-box)に合わせたヘッダー */}
       <header style={{ 
         paddingTop: 'env(safe-area-inset-top)', 
-        background: '#800020', borderBottom: '1px solid #D4AF37', 
-        textAlign: 'center', flexShrink: 0, zIndex: 10, 
-        minHeight: '80px', // 高さを80pxに変更
-        display: 'flex', alignItems: 'center', justifyContent: 'center' 
+        background: '#800020', 
+        borderBottom: '1px solid #D4AF37', 
+        textAlign: 'center', 
+        flexShrink: 0, 
+        zIndex: 10, 
+        height: '80px', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        boxSizing: 'border-box'
       }}>
         <h1 style={{ 
-          fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', margin: 0, 
-          letterSpacing: '3px', color: '#fff',
-          paddingLeft: '15px' // 右への微調整は維持
+          fontSize: '1.6rem', 
+          fontStyle: 'italic', 
+          fontWeight: 'bold', 
+          margin: 0, 
+          letterSpacing: '3px', 
+          color: '#fff',
+          paddingLeft: '15px',
+          lineHeight: '1'
         }}>
-          for VAU <span style={{ fontSize: '1.1rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span>
+          for VAU <span style={{ fontSize: '1.0rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span>
         </h1>
       </header>
 
