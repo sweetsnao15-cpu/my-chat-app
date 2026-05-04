@@ -184,12 +184,16 @@ export default function AdminPage() {
         textAlign: 'center', 
         flexShrink: 0, 
         zIndex: 10, 
-        height: '80px', 
+        height: '90px', 
         display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
+        flexDirection: 'column',
+        justifyContent: 'flex-start',
+        alignItems: 'center',
         boxSizing: 'border-box'
       }}>
+        {/* タイトルの上に10px分追加 */}
+        <div style={{ height: '10px', flexShrink: 0 }} />
+        
         <h1 style={{ 
           fontSize: '1.6rem', 
           fontStyle: 'italic', 
@@ -198,8 +202,7 @@ export default function AdminPage() {
           letterSpacing: '3px', 
           color: '#fff',
           paddingLeft: '15px',
-          paddingTop: '5px', // 文字をほんの少し下げるための調整
-          lineHeight: '1'
+          lineHeight: '1.2'
         }}>
           for VAU <span style={{ fontSize: '1.0rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span>
         </h1>
