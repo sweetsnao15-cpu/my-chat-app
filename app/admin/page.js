@@ -56,7 +56,6 @@ export default function AdminPage() {
     if (data) setGuests(data);
   }, []);
 
-  // 初期ロード：直近50件のみ取得
   const fetchInitialMessages = useCallback(async () => {
     const { data } = await supabase
       .from('messages')
@@ -65,9 +64,7 @@ export default function AdminPage() {
       .limit(50);
     
     if (data) {
-      // 画面表示用に昇順（古い順）に戻す
       setMessages(data.reverse());
-      // 最初の読み込み後に一番下へ
       setTimeout(scrollToBottomInstant, 100);
     }
   }, [scrollToBottomInstant]);
@@ -79,21 +76,15 @@ export default function AdminPage() {
     const channel = supabase.channel('admin_all_messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         setMessages(prev => {
-          // 重複チェック
           if (prev.some(m => m.id === payload.new.id)) return prev;
-          // 新しいメッセージを末尾に継ぎ足し
-          const updated = [...prev, payload.new];
-          return updated;
+          return [...prev, payload.new];
         });
-        // メッセージ追加後にスクロール
         setTimeout(scrollToBottomInstant, 50);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
-        // 削除されたメッセージを除外
         setMessages(prev => prev.filter(m => m.id !== payload.old.id));
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
-        // 更新（既読や編集）があった場合、該当メッセージを置き換え
         setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
       })
       .subscribe();
@@ -133,7 +124,7 @@ export default function AdminPage() {
     );
 
     return (
-      <div style={{ maxWidth: '600px', margin: '0 auto', width: '100%', paddingBottom: '20px' }}>
+      <div style={{ width: '100%', paddingBottom: '20px' }}>
         {filtered.map((m, index) => {
           const isMe = m.user_id === ADMIN_ID;
           const senderProfile = guests.find(g => g.id === m.user_id);
@@ -145,72 +136,49 @@ export default function AdminPage() {
           return (
             <div key={m.id}>
               {isNewDay && (
-                <div style={{ display: 'flex', justifyContent: 'center', margin: '30px 0 20px' }}>
-                  <div style={{ color: '#D4AF37', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold', fontStyle: 'italic' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '20px 0' }}>
+                  <div style={{ color: '#D4AF37', fontSize: '0.6rem', letterSpacing: '2px', fontWeight: 'bold' }}>
                     {dateStr}
                   </div>
                 </div>
               )}
-              <div style={{ marginBottom: '25px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
-                  {!isMe && viewMode !== 'DIRECT' && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="36px" /></div>}
+              <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%' }}>
+                  {!isMe && viewMode !== 'DIRECT' && <div style={{ marginTop: '2px' }}><Avatar profile={senderProfile} size="32px" /></div>}
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', flex: 1, maxWidth: '80%' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
                     {!isMe && viewMode === 'GLOBAL' && (
-                      <span style={{ fontSize: '0.9rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '6px', marginLeft: '2px' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#D4AF37', fontWeight: 'bold', marginBottom: '4px', marginLeft: '2px' }}>
                         {senderProfile?.username || 'Guest'}
                       </span>
                     )}
-                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', flexDirection: isMe ? 'row-reverse' : 'row', width: '100%', position: 'relative' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', flexDirection: isMe ? 'row-reverse' : 'row' }}>
                       <div 
                         onContextMenu={(e) => handleContextMenu(e, m)}
                         style={{ 
-                          padding: m.is_image ? '5px' : '10px 14px', 
-                          background: isMe ? 'rgba(80, 0, 0, 0.75)' : 'rgba(26, 26, 26, 0.75)', 
-                          borderRadius: isMe ? '18px 2px 18px 18px' : '2px 18px 18px 18px', 
-                          border: isMe ? '1px solid rgba(128, 0, 0, 0.3)' : '1px solid #D4AF37', 
-                          fontSize: '0.9rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                          cursor: 'pointer', position: 'relative', minWidth: '60px'
+                          padding: m.is_image ? '4px' : '10px 14px', 
+                          background: isMe ? 'rgba(80, 0, 0, 0.8)' : 'rgba(30, 30, 30, 0.9)', 
+                          borderRadius: isMe ? '16px 2px 16px 16px' : '2px 16px 16px 16px', 
+                          border: isMe ? '1px solid rgba(150, 0, 0, 0.5)' : '1px solid #D4AF37', 
+                          fontSize: '0.85rem', color: '#fff', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                          position: 'relative'
                         }}>
                         {m.is_image ? (
-                          <img 
-                            src={m.content} 
-                            onLoad={scrollToBottomInstant} 
-                            style={{ 
-                              maxWidth: '100%', 
-                              borderRadius: '10px', 
-                              display: 'block',
-                              WebkitTouchCallout: 'default',
-                              WebkitUserSelect: 'all',
-                              userSelect: 'all'
-                            }} 
-                          />
+                          <img src={m.content} onLoad={scrollToBottomInstant} style={{ maxWidth: '100%', borderRadius: '10px', display: 'block' }} />
                         ) : m.content}
 
                         {activeMenuId === m.id && (
                           <div style={{
-                            position: 'absolute',
-                            top: '100%',
-                            [isMe ? 'right' : 'left']: 0,
-                            zIndex: 100,
-                            background: '#1a1a1a',
-                            border: '1px solid #D4AF37',
-                            borderRadius: '8px',
-                            marginTop: '5px',
-                            boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            width: 'max-content',
-                            minWidth: '120px',
-                            overflow: 'hidden'
+                            position: 'absolute', top: '100%', [isMe ? 'right' : 'left']: 0, zIndex: 100,
+                            background: '#1a1a1a', border: '1px solid #D4AF37', borderRadius: '8px',
+                            marginTop: '5px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', width: 'max-content'
                           }}>
-                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem' }}>編集する</button>
-                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.85rem' }}>コピーする</button>
-                            <button onClick={(e) => { e.stopPropagation(); }} style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#ff4444', textAlign: 'left', fontSize: '0.85rem' }}>削除する</button>
+                            <button style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#fff', borderBottom: '1px solid #333', textAlign: 'left', fontSize: '0.8rem' }}>編集</button>
+                            <button style={{ padding: '12px 16px', background: 'none', border: 'none', color: '#ff4444', textAlign: 'left', fontSize: '0.8rem' }}>削除</button>
                           </div>
                         )}
                       </div>
-                      <div style={{ fontSize: '0.5rem', color: '#D4AF37', whiteSpace: 'nowrap', paddingBottom: '2px', opacity: 0.8 }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      <div style={{ fontSize: '0.5rem', color: '#D4AF37', opacity: 0.7, marginBottom: '2px' }}>{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                     </div>
                   </div>
                 </div>
@@ -225,39 +193,58 @@ export default function AdminPage() {
   return (
     <div style={{ 
       width: '100%', height: '100dvh', display: 'flex', flexDirection: 'column', 
-      background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
-      WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none'
+      background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif'
     }}>
       <style jsx global>{`
-        * { -webkit-tap-highlight-color: transparent !important; outline: none !important; }
-        ::selection { background: transparent !important; color: inherit !important; }
+        * { -webkit-tap-highlight-color: transparent !important; }
+        ::-webkit-scrollbar { width: 0px; background: transparent; }
       `}</style>
 
-      <header style={{ padding: '30px 15px 15px', background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'center', flexShrink: 0, zIndex: 10, minHeight: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <h1 style={{ fontSize: '1.8rem', fontStyle: 'italic', fontWeight: 'bold', margin: 0, letterSpacing: '3px', color: '#fff', paddingLeft: '20px' }}>
-          for VAU <span style={{ fontSize: '1.1rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span>
+      {/* Header: スマホ用に高さを少し抑える */}
+      <header style={{ padding: 'env(safe-area-inset-top) 15px 10px', background: '#800020', borderBottom: '1px solid #D4AF37', textAlign: 'center', zIndex: 10 }}>
+        <h1 style={{ fontSize: '1.4rem', fontStyle: 'italic', fontWeight: 'bold', margin: '10px 0', letterSpacing: '2px', color: '#fff' }}>
+          for VAU <span style={{ fontSize: '0.9rem', color: '#D4AF37' }}>-HOST-</span>
         </h1>
       </header>
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* Guest List: スマホ縦画面だと幅を狭く（60px） */}
         {viewMode === 'DIRECT' && (
-          <div style={{ width: '80px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', padding: '15px 0', flexShrink: 0 }}>
+          <div style={{ width: '65px', borderRight: '1px solid #222', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px', padding: '10px 0', flexShrink: 0, background: '#050505' }}>
             {sortedGuests.map(g => (
               <div key={g.id} onClick={() => setSelectedGuestId(g.id)} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <Avatar profile={g} size="45px" isSelected={selectedGuestId === g.id} />
-                <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '5px' }}>{g.username?.substring(0, 5)}</div>
+                <Avatar profile={g} size="40px" isSelected={selectedGuestId === g.id} />
+                <div style={{ fontSize: '0.5rem', color: selectedGuestId === g.id ? '#D4AF37' : '#555', marginTop: '4px', textAlign: 'center', width: '90%', overflow: 'hidden' }}>{g.username?.substring(0, 4)}</div>
               </div>
             ))}
           </div>
         )}
-        <div style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '15px' }} ref={scrollRef}>
+        
+        {/* Main Content */}
+        <div style={{ flex: 1, background: '#050505', overflowY: 'auto', padding: '10px' }} ref={scrollRef}>
           {renderMessages()}
         </div>
       </div>
 
-      <footer style={{ padding: '12px 15px', background: '#800020', borderTop: '1px solid #D4AF37', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', flexShrink: 0, zIndex: 10 }}>
+      {/* Footer: セーフエリア対応 */}
+      <footer style={{ 
+        padding: `10px 15px calc(10px + env(safe-area-inset-bottom))`, 
+        background: '#800020', borderTop: '1px solid #D4AF37', 
+        display: 'flex', justifyContent: 'center', gap: '60px', zIndex: 10 
+      }}>
         {['GLOBAL', 'DIRECT'].map(mode => (
-          <button key={mode} onClick={() => setViewMode(mode)} style={{ background: 'transparent', color: viewMode === mode ? '#D4AF37' : 'rgba(255,255,255,0.6)', border: 'none', fontSize: '0.85rem', fontWeight: 'bold', letterSpacing: '2px', padding: '5px 10px', borderBottom: viewMode === mode ? '1px solid #D4AF37' : '1px solid transparent', cursor: 'pointer' }}>{mode}</button>
+          <button 
+            key={mode} 
+            onClick={() => setViewMode(mode)} 
+            style={{ 
+              background: 'transparent', color: viewMode === mode ? '#D4AF37' : 'rgba(255,255,255,0.5)', 
+              border: 'none', fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', 
+              borderBottom: viewMode === mode ? '2px solid #D4AF37' : '2px solid transparent',
+              padding: '5px 0'
+            }}
+          >
+            {mode}
+          </button>
         ))}
       </footer>
     </div>
