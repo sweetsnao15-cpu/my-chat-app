@@ -177,7 +177,6 @@ export default function AdminPage() {
       background: '#000', color: '#fff', overflow: 'hidden', fontFamily: 'serif',
       WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none'
     }}>
-      {/* ゲスト側の高さ(80px)と計算方法(border-box)に合わせたヘッダー */}
       <header style={{ 
         paddingTop: 'env(safe-area-inset-top)', 
         background: '#800020', 
@@ -199,6 +198,7 @@ export default function AdminPage() {
           letterSpacing: '3px', 
           color: '#fff',
           paddingLeft: '15px',
+          paddingTop: '5px', // 文字をほんの少し下げるための調整
           lineHeight: '1'
         }}>
           for VAU <span style={{ fontSize: '1.0rem', verticalAlign: 'middle', color: '#D4AF37' }}>ｰHOSTｰ</span>
